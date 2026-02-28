@@ -43,7 +43,7 @@ const tabs: Tab[] = ["Overview", "H1 Candle Data", "Economic Calendar Data", "FR
 const terminalStatuses: JobStatus[] = ["completed", "failed", "cancelled"];
 const trackedJobNames = new Set(["ingest.price", "ingest.calendar", "fred.refresh"]);
 
-const timezoneOptions = [
+const fallbackTimezoneOptions = [
   "UTC",
   "Asia/Jakarta",
   "Asia/Gaza",
@@ -52,6 +52,27 @@ const timezoneOptions = [
   "Asia/Tokyo",
   "Australia/Sydney",
 ];
+
+function resolveTimezoneOptions(): string[] {
+  try {
+    const maybeSupportedValuesOf = (Intl as typeof Intl & {
+      supportedValuesOf?: (key: "timeZone") => string[];
+    }).supportedValuesOf;
+    if (typeof maybeSupportedValuesOf === "function") {
+      const zones = maybeSupportedValuesOf("timeZone").filter((zone) => zone.trim().length > 0);
+      if (zones.length > 0) {
+        const unique = Array.from(new Set(zones));
+        if (!unique.includes("UTC")) {
+          unique.unshift("UTC");
+        }
+        return unique;
+      }
+    }
+  } catch {
+    // Fallback list is used when supportedValuesOf is unavailable.
+  }
+  return fallbackTimezoneOptions;
+}
 
 function timezoneUtcPrefix(timeZone: string): string {
   try {
@@ -104,7 +125,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<any>(null);
   const [runtimeConfig, setRuntimeConfig] = useState<any>(null);
-  const [mt5Folder, setMt5Folder] = useState("");
   const [fredApiKey, setFredApiKey] = useState("");
   const [displayTz, setDisplayTz] = useState("Asia/Jakarta");
   const [serverTz, setServerTz] = useState("Asia/Gaza");
@@ -126,9 +146,10 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const bootstrap = useAppStore((s) => s.bootstrap);
   const setBootstrap = useAppStore((s) => s.setBootstrap);
 
+  const timezoneOptions = useMemo(() => resolveTimezoneOptions(), []);
   const timezoneOptionItems = useMemo(
     () => timezoneOptions.map((tz) => ({ value: tz, label: `${timezoneUtcPrefix(tz)} ${tz}` })),
-    [],
+    [timezoneOptions],
   );
 
   const longJobActive = Boolean(activeJob && !isTerminalStatus(activeJob.status));
@@ -209,7 +230,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
     setOverview(checklistRes.data);
     setRuntimeConfig(runtimeRes.data);
-    setMt5Folder(String(runtimeRes.data.mt5_folder ?? ""));
     setDisplayTz(String(runtimeRes.data.timezone_display ?? "Asia/Jakarta"));
     setServerTz(String(runtimeRes.data.timezone_server ?? "Asia/Gaza"));
   }
@@ -428,36 +448,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
     });
   }
 
-  async function applyRuntimeSettings() {
-    setBusyAction("runtime");
-    setError("");
-    setSuccessText("");
-    try {
-      const payload: { mt5_folder: string; fred_api_key?: string } = {
-        mt5_folder: mt5Folder.trim(),
-      };
-      const key = fredApiKey.trim();
-      if (key) payload.fred_api_key = key;
-      const applyRes = await postRuntimeConfigApply(sessionToken, payload);
-      await loadCore();
-      setFredApiKey("");
-      setSuccessText("Runtime settings applied.");
-      if (bootstrap) {
-        setBootstrap({
-          ...bootstrap,
-          firstLaunchComplete: true,
-          macroEnabled: Boolean(applyRes.data.macro_enabled),
-          macroDisabledReason: String(applyRes.data.macro_disabled_reason ?? ""),
-        });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to apply runtime settings");
-    } finally {
-      setBusyAction("");
-    }
-  }
-
-
   async function applyTimezoneSettings() {
     setBusyAction("timezone");
     setError("");
@@ -528,6 +518,28 @@ export function DataChecklistPage({ sessionToken }: Props) {
     setError("");
     setSuccessText("");
     try {
+      const key = fredApiKey.trim();
+      if (key) {
+        const existingMt5Folder = String(runtimeConfig?.mt5_folder ?? "").trim();
+        if (!existingMt5Folder) {
+          throw new Error("MT5 folder is not configured on runtime config.");
+        }
+        const applyRes = await postRuntimeConfigApply(sessionToken, {
+          mt5_folder: existingMt5Folder,
+          fred_api_key: key,
+        });
+        setFredApiKey("");
+        await loadCore();
+        if (bootstrap) {
+          setBootstrap({
+            ...bootstrap,
+            firstLaunchComplete: true,
+            macroEnabled: Boolean(applyRes.data.macro_enabled),
+            macroDisabledReason: String(applyRes.data.macro_disabled_reason ?? ""),
+          });
+        }
+      }
+
       const res = await postFredRefresh(sessionToken);
       const accepted = Boolean(res?.data?.accepted);
       if (!accepted) {
@@ -638,63 +650,34 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
       {!loading && !error && activeTab === "Overview" && (
         <>
-          <div className="ops-grid-two">
-            <div className="panel ops-card runtime-card">
-              <h2 className="ops-card-title">Runtime Settings</h2>
-              <p className="muted">Configure MT5 folder, then Apply.</p>
-              <div className="form-grid">
-                <div className="form-field">
-                  <label htmlFor="mt5-folder">MT5 Data Folder</label>
-                  <input className="control-field"
-                    id="mt5-folder"
-                    value={mt5Folder}
-                    onChange={(e) => setMt5Folder(e.target.value)}
-                    placeholder="C:\\Users\\...\\MetaQuotes\\Terminal\\Common\\Files"
-                  />
-                </div>
+          <div className="panel ops-card timezone-card">
+            <h2 className="ops-card-title">Timezone Conversion</h2>
+            <div className="form-grid">
+              <div className="form-field">
+                <label>Local Time</label>
+                <select className="control-field" value={displayTz} onChange={(e) => setDisplayTz(e.target.value)}>
+                  {timezoneOptionItems.map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="row surface-toolbar">
-                <button
-                  type="button"
-                  className="btn btn-primary ui-interactive ui-hover-lift"
-                  disabled={busyAction === "runtime" || longJobActive || mt5Folder.trim().length === 0}
-                  onClick={() => void applyRuntimeSettings()}
-                >
-                  {busyAction === "runtime" ? "Applying..." : "Apply"}
-                </button>
+              <div className="form-field">
+                <label>Server Time</label>
+                <select className="control-field" value={serverTz} onChange={(e) => setServerTz(e.target.value)}>
+                  {timezoneOptionItems.map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-
             </div>
-
-            <div className="panel ops-card timezone-card">
-              <h2 className="ops-card-title">Timezone Conversion</h2>
-              <div className="form-grid">
-                <div className="form-field">
-                  <label>Local Time</label>
-                  <select className="control-field" value={displayTz} onChange={(e) => setDisplayTz(e.target.value)}>
-                    {timezoneOptionItems.map((tz) => (
-                      <option key={tz.value} value={tz.value}>
-                        {tz.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label>Server Time</label>
-                  <select className="control-field" value={serverTz} onChange={(e) => setServerTz(e.target.value)}>
-                    {timezoneOptionItems.map((tz) => (
-                      <option key={tz.value} value={tz.value}>
-                        {tz.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="row surface-toolbar">
-                <button type="button" className="btn btn-primary" disabled={busyAction === "timezone" || longJobActive} onClick={() => void applyTimezoneSettings()}>
-                  {busyAction === "timezone" ? "Applying..." : "Apply timezone conversion"}
-                </button>
-              </div>
+            <div className="row surface-toolbar">
+              <button type="button" className="btn btn-primary" disabled={busyAction === "timezone" || longJobActive} onClick={() => void applyTimezoneSettings()}>
+                {busyAction === "timezone" ? "Applying..." : "Apply timezone conversion"}
+              </button>
             </div>
           </div>
 
