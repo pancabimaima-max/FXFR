@@ -1,12 +1,11 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 
 export type AppPage =
   | "Data Checklist"
   | "Dashboard"
   | "Fundamental Tools"
   | "Charts (BETA)"
-  | "Logs"
-  | "Developer Tab";
+  | "Logs";
 
 export type CommandBarMode = "full" | "slim" | "hidden";
 
@@ -95,7 +94,6 @@ export const pages: AppPage[] = [
   "Fundamental Tools",
   "Charts (BETA)",
   "Logs",
-  "Developer Tab",
 ];
 
 const defaultCommandBarMode = readStoredCommandBarMode();

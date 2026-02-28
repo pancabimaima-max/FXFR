@@ -447,15 +447,6 @@ a {
   color: var(--fx-color-state-danger);
 }
 
-.wizard {
-  width: min(780px, 94vw);
-  margin: 48px auto;
-  display: grid;
-  gap: 12px;
-}
-
-.wizard input:not(.control-field),
-.wizard textarea:not(.control-field),
 .form-field input:not(.control-field),
 .form-field textarea:not(.control-field),
 .form-field select:not(.control-field),
@@ -468,8 +459,6 @@ a {
   border-radius: 10px;
 }
 
-.wizard input,
-.wizard textarea,
 .form-field input,
 .form-field textarea,
 .form-field select,
@@ -1609,120 +1598,6 @@ button:focus-visible:not(.btn) {
 }
 
 /* Tranche 7: AMD Onboarding + System State Surfaces */
-.wizard-page-shell {
-  min-height: calc(100vh - 84px);
-  display: grid;
-  align-content: center;
-  justify-items: center;
-}
-
-.wizard-deck {
-  width: min(860px, 94vw);
-  display: grid;
-  gap: 12px;
-  border: 1px solid var(--fx-color-surface-border-strong);
-  border-radius: 14px;
-  padding: 14px;
-  background: linear-gradient(180deg, var(--fx-color-surface-onboarding-inset) 0%, var(--fx-color-surface-onboarding-card) 100%);
-  box-shadow: var(--fx-effect-shadow-onboarding-deck), var(--fx-effect-glow-onboarding-card);
-}
-
-.wizard-header-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.wizard-header-row h1 {
-  color: var(--fx-color-text-onboarding-heading);
-}
-
-.wizard-card {
-  border-color: var(--fx-color-surface-border-strong);
-  background: linear-gradient(180deg, var(--fx-color-surface-onboarding-card) 0%, var(--fx-color-surface-onboarding-inset) 100%);
-  box-shadow: var(--fx-effect-shadow-onboarding-deck);
-}
-
-.wizard-card-title {
-  color: var(--fx-color-text-onboarding-heading);
-  margin-bottom: 4px;
-}
-
-.wizard-card-help {
-  color: var(--fx-color-text-onboarding-body);
-  margin: 0;
-}
-
-.wizard-input-grid {
-  margin-top: 10px;
-  display: grid;
-  gap: 8px;
-}
-
-.wizard-stepper {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.wizard-step-chip {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--fx-color-surface-border-strong);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 0.74rem;
-  letter-spacing: 0.03em;
-  background: linear-gradient(180deg, var(--fx-color-surface-onboarding-card) 0%, var(--fx-color-surface-onboarding-inset) 100%);
-  color: var(--fx-color-text-onboarding-body);
-}
-
-.wizard-step-chip.active {
-  border-color: var(--fx-color-accent-secondary);
-  color: var(--fx-color-text-inverse);
-  background: linear-gradient(180deg, var(--fx-color-accent-primary) 0%, var(--fx-color-accent-secondary) 100%);
-  box-shadow: var(--fx-effect-glow-pill);
-}
-
-.wizard-step-chip.done {
-  border-color: var(--fx-color-state-success);
-  color: var(--fx-color-state-success);
-  background: var(--fx-color-state-success-subtle);
-}
-
-.wizard-step-chip.pending {
-  opacity: 0.9;
-}
-
-.wizard-actions {
-  justify-content: flex-end;
-  margin-top: 2px;
-}
-
-.wizard-btn {
-  min-width: 104px;
-}
-
-.wizard-btn-secondary {
-  border-color: var(--fx-color-surface-border-strong) !important;
-  background: linear-gradient(180deg, var(--fx-color-surface-onboarding-card) 0%, var(--fx-color-surface-onboarding-inset) 100%) !important;
-  color: var(--fx-color-text-onboarding-body) !important;
-  box-shadow: none !important;
-}
-
-.wizard-btn-primary {
-  border-color: var(--fx-color-accent-secondary) !important;
-  background: linear-gradient(180deg, var(--fx-color-accent-primary) 0%, var(--fx-color-accent-secondary) 100%) !important;
-  color: var(--fx-color-text-inverse) !important;
-  box-shadow: var(--fx-effect-glow-pill) !important;
-}
-
-.wizard-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 
 .bootstrap-state-card {
   border-color: var(--fx-color-state-danger);
@@ -1773,30 +1648,10 @@ button:focus-visible:not(.btn) {
   background: linear-gradient(180deg, var(--fx-color-surface-state-banner) 0%, var(--fx-color-surface-onboarding-inset) 100%);
 }
 
-.placeholder-page {
-  display: grid;
-  gap: 12px;
-}
-
 .empty-state-card {
   border-color: var(--fx-color-surface-border-strong);
   background: linear-gradient(180deg, var(--fx-color-surface-onboarding-card) 0%, var(--fx-color-surface-onboarding-inset) 100%);
   box-shadow: var(--fx-effect-shadow-onboarding-deck), var(--fx-effect-glow-onboarding-card);
-}
-
-.empty-state-title {
-  color: var(--fx-color-text-onboarding-heading);
-  margin-bottom: 8px;
-}
-
-.empty-state-caption {
-  color: var(--fx-color-text-onboarding-body);
-  margin: 0;
-}
-
-.empty-state-meta {
-  margin-top: 10px;
-  font-size: 0.86rem;
 }
 
 .inline-checks input[type="checkbox"],
@@ -1813,17 +1668,6 @@ button:focus-visible:not(.btn) {
 .compact-ops p,
 .compact-ops .muted {
   color: var(--fx-color-text-onboarding-body);
-}
-
-@media (max-width: 980px) {
-  .wizard-page-shell {
-    min-height: auto;
-    align-content: start;
-  }
-
-  .wizard-deck {
-    width: min(92vw, 860px);
-  }
 }
 
 /* Tranche 8: AMD Global Control Language + Interaction Consistency */
@@ -2090,7 +1934,6 @@ textarea:disabled {
 .runtime-card,
 .timezone-card,
 .ops-card,
-.wizard-card,
 .empty-state-card,
 .dashboard-cockpit-card,
 .charts-surface-card,
@@ -2152,8 +1995,7 @@ textarea:disabled {
   .checklist-header-row,
   .tools-header-row,
   .charts-header-row,
-  .logs-header-row,
-  .wizard-header-row {
+  .logs-header-row {
     align-items: flex-start;
   }
 

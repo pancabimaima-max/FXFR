@@ -8,7 +8,6 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { DataChecklistPage } from "@/pages/DataChecklistPage";
 import { FundamentalToolsPage } from "@/pages/FundamentalToolsPage";
 import { LogsPage } from "@/pages/LogsPage";
-import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { DEFAULT_MAJOR_USD_PAIRS, isValidFxPair, useAppStore } from "@/store/useAppStore";
 
 type EngineRuntimeInfo = {
@@ -120,7 +119,7 @@ function MainSurface() {
   if (activePage === "Fundamental Tools") return <FundamentalToolsPage sessionToken={token} />;
   if (activePage === "Charts (BETA)") return <ChartsPage sessionToken={token} />;
   if (activePage === "Logs") return <LogsPage sessionToken={token} />;
-  return <PlaceholderPage title="Developer Tab" description="Static visual prototype lab only (no logic)." />;
+  return null;
 }
 
 export function App() {
