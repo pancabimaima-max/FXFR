@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { fetchBootstrap } from "@/api/client";
-import { SidebarNav } from "@/components/SidebarNav";
 import { TopCommandBar } from "@/components/TopCommandBar";
 import { ChartsPage } from "@/pages/ChartsPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -129,7 +128,6 @@ export function App() {
   const activePage = useAppStore((s) => s.activePage);
   const setActivePage = useAppStore((s) => s.setActivePage);
   const activePair = useAppStore((s) => s.activePair);
-  const commandBarMode = useAppStore((s) => s.commandBarMode);
   const setBootstrap = useAppStore((s) => s.setBootstrap);
   const setActivePair = useAppStore((s) => s.setActivePair);
   const setInitialized = useAppStore((s) => s.setInitialized);
@@ -259,15 +257,8 @@ export function App() {
 
   return (
     <main className="app-root">
-      <SidebarNav />
       <section className="content">
-        <TopCommandBar
-          mode={commandBarMode}
-          activePage={activePage}
-          onNavigate={setActivePage}
-          activePair={activePair}
-          macroEnabled={bootstrap.macroEnabled}
-        />
+        <TopCommandBar activePage={activePage} onNavigate={setActivePage} />
         {!bootstrap.macroEnabled && (
           <div className="warning-banner runtime-warning-banner">Macro module disabled: {bootstrap.macroDisabledReason}</div>
         )}

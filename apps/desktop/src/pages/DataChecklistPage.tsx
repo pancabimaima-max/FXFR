@@ -617,6 +617,9 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
       <div className="events-status-row">
         <span className={`events-indicator ${eventStreamState}`}>Events: {eventStreamState}</span>
+        <span className={`checklist-macro-chip status-chip ${bootstrap?.macroEnabled ? "status-chip-live" : "status-chip-muted"}`}>
+          Macro: {bootstrap?.macroEnabled ? "Live" : "Disabled"}
+        </span>
         <span className="muted">Last event: {formatClock(lastEventAt)}</span>
       </div>
 
