@@ -28,6 +28,30 @@ def _state_from_age(age_h: float | None, ready_h: float, warn_h: float) -> str:
     return "error"
 
 
+def _is_fx_market_closed(now_utc: datetime) -> bool:
+    # FX is typically closed from Friday 22:00 UTC through Sunday 22:00 UTC.
+    weekday = now_utc.weekday()  # Monday=0 ... Sunday=6
+    hour = now_utc.hour
+    if weekday == 5:
+        return True
+    if weekday == 6 and hour < 22:
+        return True
+    if weekday == 4 and hour >= 22:
+        return True
+    return False
+
+
+def _state_from_price_age(age_h: float | None, now_utc: datetime) -> tuple[str, str]:
+    base_state = _state_from_age(age_h, PRICE_READY_HOURS, PRICE_WARN_HOURS)
+    if base_state != "error":
+        return base_state, ""
+    if age_h is None:
+        return "error", ""
+    if _is_fx_market_closed(now_utc) and age_h <= 72.0:
+        return "warn", " Market close window detected; stale H1 age is tolerated until reopen."
+    return "error", ""
+
+
 def _state_factor(state: str) -> float:
     token = str(state).lower()
     if token == "ready":
@@ -120,9 +144,13 @@ def build_checklist_overview(
 ) -> dict[str, Any]:
     sections: list[dict] = []
     timeline: list[dict] = []
+    now_utc = datetime.now(timezone.utc)
 
     price_age = age_hours_from_iso(str((price_meta or {}).get("max_time_utc", "")))
-    price_state = _state_from_age(price_age, PRICE_READY_HOURS, PRICE_WARN_HOURS) if price_meta else "error"
+    price_state = "error"
+    price_state_note = ""
+    if price_meta:
+        price_state, price_state_note = _state_from_price_age(price_age, now_utc)
     price_detail = "Not loaded."
     if price_meta:
         aggregate_detail = f"Aggregate latest local candle age: {_fmt_age(price_age)}; gaps={int(price_meta.get('gap_count', 0))}."
@@ -136,7 +164,7 @@ def build_checklist_overview(
             )
         elif token:
             symbol_detail = f" Active {token}: no rows in current price dataset."
-        price_detail = f"{aggregate_detail}{symbol_detail}"
+        price_detail = f"{aggregate_detail}{symbol_detail}{price_state_note}"
         timeline.append(
             {
                 "section": "H1 Candle Data",

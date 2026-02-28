@@ -39,6 +39,16 @@ type ActiveJob = {
   updated_at_utc: string;
 };
 
+type PricePreviewMeta = {
+  resolvedSymbol: string;
+  newestCandleUtc: string;
+  newestCandleLocal: string;
+  totalRows: number;
+  sourceRows: number;
+  filteredRows: number;
+  droppedInvalidTimeRows: number;
+};
+
 const tabs: Tab[] = ["Overview", "H1 Candle Data", "Economic Calendar Data", "FRED Data"];
 const terminalStatuses: JobStatus[] = ["completed", "failed", "cancelled"];
 const trackedJobNames = new Set(["ingest.price", "ingest.calendar", "fred.refresh"]);
@@ -120,6 +130,13 @@ function formatClock(value: string): string {
   return dt.toLocaleTimeString([], { hour12: false });
 }
 
+function formatDateTime(value: string): string {
+  if (!value) return "n/a";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString([], { hour12: false });
+}
+
 export function DataChecklistPage({ sessionToken }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [loading, setLoading] = useState(true);
@@ -131,6 +148,15 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const [priceFile, setPriceFile] = useState<File | null>(null);
   const [calendarFile, setCalendarFile] = useState<File | null>(null);
   const [pricePreviewRows, setPricePreviewRows] = useState<Record<string, unknown>[]>([]);
+  const [pricePreviewMeta, setPricePreviewMeta] = useState<PricePreviewMeta>({
+    resolvedSymbol: "",
+    newestCandleUtc: "",
+    newestCandleLocal: "",
+    totalRows: 0,
+    sourceRows: 0,
+    filteredRows: 0,
+    droppedInvalidTimeRows: 0,
+  });
   const [calendarPreviewRows, setCalendarPreviewRows] = useState<Record<string, unknown>[]>([]);
   const [fredPolicyRows, setFredPolicyRows] = useState<Record<string, unknown>[]>([]);
   const [fredInflRows, setFredInflRows] = useState<Record<string, unknown>[]>([]);
@@ -242,7 +268,18 @@ export function DataChecklistPage({ sessionToken }: Props) {
       fetchPricePreview(sessionToken, 50, activePair),
       fetchCalendarPreview(sessionToken, 50),
     ]);
-    setPricePreviewRows(priceRes.data.rows ?? []);
+    const priceData = priceRes.data ?? {};
+    const newestUtc = String(priceData.preview_max_time_utc ?? "");
+    setPricePreviewRows(priceData.rows ?? []);
+    setPricePreviewMeta({
+      resolvedSymbol: String(priceData.resolved_symbol ?? ""),
+      newestCandleUtc: newestUtc,
+      newestCandleLocal: newestUtc ? formatDateTime(newestUtc) : "",
+      totalRows: Number(priceData.count ?? 0),
+      sourceRows: Number(priceData.debug?.source_rows ?? 0),
+      filteredRows: Number(priceData.debug?.filtered_rows ?? 0),
+      droppedInvalidTimeRows: Number(priceData.debug?.dropped_invalid_time_rows ?? 0),
+    });
     setCalendarPreviewRows(calendarRes.data.rows ?? []);
   }
 
@@ -773,6 +810,15 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
           <div className="panel ops-card">
             <h2 className="ops-card-title">Price Preview (Newest 50 rows for {activePair})</h2>
+            <p className="muted">
+              Newest candle (UTC): {pricePreviewMeta.newestCandleUtc || "n/a"} | Local: {pricePreviewMeta.newestCandleLocal || "n/a"} | Symbol served:{" "}
+              {pricePreviewMeta.resolvedSymbol || "n/a"} | Rows: {pricePreviewMeta.totalRows}
+            </p>
+            {pricePreviewMeta.resolvedSymbol && pricePreviewMeta.resolvedSymbol !== activePair && (
+              <p className="muted">
+                Symbol mismatch detected (requested {activePair}, served {pricePreviewMeta.resolvedSymbol}) - verify runtime is using latest engine build.
+              </p>
+            )}
             <DataTable rows={pricePreviewRows} emptyText="No price data loaded." />
           </div>
         </>

@@ -264,22 +264,72 @@ def _to_rows(df: pd.DataFrame, limit: int = 50) -> list[dict]:
     return rows
 
 
+def _normalize_price_time_utc(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "TimeUTC" not in df.columns:
+        return pd.DataFrame()
+    out = df.copy()
+    out["TimeUTC"] = pd.to_datetime(out["TimeUTC"], errors="coerce", utc=True)
+    out = out.dropna(subset=["TimeUTC"])
+    return out
+
+
+def _build_dataset_price_meta(df: pd.DataFrame) -> dict | None:
+    out = _normalize_price_time_utc(df)
+    if out.empty:
+        return None
+    out = out.sort_values("TimeUTC")
+    diffs = out["TimeUTC"].diff().dropna().dt.total_seconds().div(3600.0)
+    missing = diffs[diffs > 1.0].apply(lambda h: max(0, int(round(h - 1.0))))
+    gap_count = int(missing.sum())
+    max_ts = out["TimeUTC"].max()
+    min_ts = out["TimeUTC"].min()
+    return {
+        "rows_loaded": int(len(out)),
+        "gap_count": gap_count,
+        "min_time_utc": min_ts.isoformat() if hasattr(min_ts, "isoformat") else "",
+        "max_time_utc": max_ts.isoformat() if hasattr(max_ts, "isoformat") else "",
+    }
+
+
+def _price_meta_timestamp(meta: dict | None) -> pd.Timestamp | None:
+    ts = pd.to_datetime(str((meta or {}).get("max_time_utc", "")), errors="coerce", utc=True)
+    if pd.isna(ts):
+        return None
+    return ts
+
+
+def _resolve_price_meta(price_meta: dict | None, parquet_meta: dict | None) -> dict | None:
+    stored_ts = _price_meta_timestamp(price_meta)
+    parquet_ts = _price_meta_timestamp(parquet_meta)
+    if parquet_meta and (stored_ts is None or (parquet_ts is not None and parquet_ts > stored_ts)):
+        merged = dict(price_meta or {})
+        merged.update(parquet_meta)
+        merged["meta_source"] = "parquet_guard"
+        return merged
+    if price_meta:
+        merged = dict(price_meta)
+        merged.setdefault("meta_source", "stored_meta")
+        return merged
+    if parquet_meta:
+        merged = dict(parquet_meta)
+        merged["meta_source"] = "parquet_only"
+        return merged
+    return None
+
+
 def _build_symbol_price_meta(df: pd.DataFrame, symbol: str) -> dict | None:
-    if df.empty:
+    out = _normalize_price_time_utc(df)
+    if out.empty:
         return None
     token = str(symbol or "").strip().upper()
     if not token:
         return None
 
-    out = df[df["Symbol"].astype(str).str.upper() == token].copy()
+    out = out[out["Symbol"].astype(str).str.upper() == token].copy()
     if out.empty:
         return None
 
-    out["TimeUTC"] = pd.to_datetime(out["TimeUTC"], errors="coerce", utc=True)
-    out = out.dropna(subset=["TimeUTC"]).sort_values("TimeUTC")
-    if out.empty:
-        return None
-
+    out = out.sort_values("TimeUTC")
     diffs = out["TimeUTC"].diff().dropna().dt.total_seconds().div(3600.0)
     missing = diffs[diffs > 1.0].apply(lambda h: max(0, int(round(h - 1.0))))
     gap_count = int(missing.sum())
@@ -794,10 +844,12 @@ def get_fundamental_differential(
 def get_checklist_overview(request: Request, symbol: str | None = Query(default=None)):
     services = _service(request)
     state = services["state"].load_runtime_state()
-    price_meta = services["db"].get_setting("latest_price_meta", None)
+    raw_price_meta = services["db"].get_setting("latest_price_meta", None)
     cal_meta = services["db"].get_setting("latest_calendar_meta", None)
     price_path = services["settings"].parquet_dir / "price_latest.parquet"
     price_df = _load_price_df(price_path)
+    parquet_price_meta = _build_dataset_price_meta(price_df)
+    price_meta = _resolve_price_meta(raw_price_meta, parquet_price_meta)
     active_symbol = str(symbol or "").strip().upper()
     if not active_symbol and state.top_pairs:
         active_symbol = str(state.top_pairs[0]).strip().upper()
@@ -837,16 +889,64 @@ def get_price_preview(request: Request, limit: int = Query(default=50, ge=1, le=
     path = services["settings"].parquet_dir / "price_latest.parquet"
     df = _load_price_df(path)
     if df.empty:
-        return envelope(request, {"rows": [], "count": 0})
+        return envelope(
+            request,
+            {
+                "rows": [],
+                "count": 0,
+                "resolved_symbol": str(symbol or "").strip().upper(),
+                "preview_max_time_utc": "",
+                "debug": {"source_rows": 0, "filtered_rows": 0, "dropped_invalid_time_rows": 0},
+            },
+        )
 
     token = str(symbol or "").strip().upper()
+    source_rows = int(len(df))
     if token:
         df = df[df["Symbol"].astype(str).str.upper() == token].copy()
         if df.empty:
-            return envelope(request, {"rows": [], "count": 0})
+            return envelope(
+                request,
+                {
+                    "rows": [],
+                    "count": 0,
+                    "resolved_symbol": token,
+                    "preview_max_time_utc": "",
+                    "debug": {"source_rows": source_rows, "filtered_rows": 0, "dropped_invalid_time_rows": 0},
+                },
+            )
 
-    df = df.sort_values("TimeUTC", ascending=False)
-    return envelope(request, {"rows": _to_rows(df, limit=int(limit)), "count": int(len(df))})
+    before_parse_rows = int(len(df))
+    df = _normalize_price_time_utc(df)
+    dropped_invalid = max(0, before_parse_rows - int(len(df)))
+    if df.empty:
+        return envelope(
+            request,
+            {
+                "rows": [],
+                "count": 0,
+                "resolved_symbol": token,
+                "preview_max_time_utc": "",
+                "debug": {"source_rows": source_rows, "filtered_rows": before_parse_rows, "dropped_invalid_time_rows": dropped_invalid},
+            },
+        )
+
+    df = df.sort_values("TimeUTC", ascending=False, kind="mergesort")
+    max_time = df["TimeUTC"].max()
+    return envelope(
+        request,
+        {
+            "rows": _to_rows(df, limit=int(limit)),
+            "count": int(len(df)),
+            "resolved_symbol": token,
+            "preview_max_time_utc": max_time.isoformat() if hasattr(max_time, "isoformat") else "",
+            "debug": {
+                "source_rows": source_rows,
+                "filtered_rows": before_parse_rows,
+                "dropped_invalid_time_rows": dropped_invalid,
+            },
+        },
+    )
 
 
 @router.get("/preview/calendar", dependencies=[Depends(_must_auth)])

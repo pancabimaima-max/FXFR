@@ -180,7 +180,17 @@ export async function postAutoFetchApplySync(
 }
 
 export async function fetchPricePreview(sessionToken: string, limit = 50, symbol?: string) {
-  return request<{ rows: Record<string, unknown>[]; count: number }>(
+  return request<{
+    rows: Record<string, unknown>[];
+    count: number;
+    resolved_symbol?: string;
+    preview_max_time_utc?: string;
+    debug?: {
+      source_rows?: number;
+      filtered_rows?: number;
+      dropped_invalid_time_rows?: number;
+    };
+  }>(
     withQuery("/v1/preview/price", { limit, symbol }),
     { method: "GET" },
     sessionToken,
