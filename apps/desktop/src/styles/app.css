@@ -133,7 +133,7 @@ a {
 .content {
   padding: 18px;
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .top-command-bar {
@@ -277,7 +277,7 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .tab-btn {
@@ -779,11 +779,6 @@ button:focus-visible:not(.btn) {
   margin-top: 8px;
 }
 
-.dashboard-page {
-  display: grid;
-  gap: 12px;
-}
-
 .dashboard-command-panel {
   border-color: var(--fx-color-surface-border-strong);
   background: linear-gradient(180deg, var(--fx-color-surface-alt) 0%, var(--fx-color-surface-base) 100%);
@@ -856,9 +851,13 @@ button:focus-visible:not(.btn) {
 }
 
 .checklist-page,
-.tools-page {
+.dashboard-page,
+.tools-page,
+.charts-page,
+.logs-page {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  align-content: start;
 }
 
 .checklist-header-row,
@@ -1125,12 +1124,6 @@ button:focus-visible:not(.btn) {
   border-color: var(--fx-color-accent-secondary);
   background: linear-gradient(180deg, var(--fx-color-accent-subtle) 0%, var(--fx-color-surface-inset) 100%);
   box-shadow: var(--fx-effect-glow-pill);
-}
-
-.charts-page,
-.logs-page {
-  display: grid;
-  gap: 12px;
 }
 
 .charts-header-row,
@@ -1963,7 +1956,7 @@ textarea:disabled {
   }
 
   .content {
-    gap: 12px;
+    gap: 10px;
     padding: 16px;
   }
 }

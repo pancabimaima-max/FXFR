@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { WsEvent } from "@fxfr/contracts";
 
 import {
-  checkDesktopUpdateManifest,
   fetchCalendarPreview,
   fetchChecklist,
   fetchFredSnapshot,
@@ -20,7 +19,7 @@ import {
 } from "@/api/client";
 import { DataTable } from "@/components/DataTable";
 import { connectEngineEvents } from "@/realtime/engineEvents";
-import { type CommandBarMode, useAppStore } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
 
 type Props = {
   sessionToken: string;
@@ -96,9 +95,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const [fredApiKey, setFredApiKey] = useState("");
   const [displayTz, setDisplayTz] = useState("Asia/Jakarta");
   const [serverTz, setServerTz] = useState("Asia/Gaza");
-  const [releaseChannel, setReleaseChannel] = useState<"stable" | "beta">("stable");
-  const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
-  const [updateCheckStatus, setUpdateCheckStatus] = useState("");
   const [priceFile, setPriceFile] = useState<File | null>(null);
   const [calendarFile, setCalendarFile] = useState<File | null>(null);
   const [pricePreviewRows, setPricePreviewRows] = useState<Record<string, unknown>[]>([]);
@@ -116,8 +112,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
   const bootstrap = useAppStore((s) => s.bootstrap);
   const setBootstrap = useAppStore((s) => s.setBootstrap);
-  const commandBarMode = useAppStore((s) => s.commandBarMode);
-  const setCommandBarMode = useAppStore((s) => s.setCommandBarMode);
 
   const autoFetch = useMemo(() => {
     const src = overview?.auto_fetch_status ?? {};
@@ -217,7 +211,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
     setMt5Folder(String(runtimeRes.data.mt5_folder ?? ""));
     setDisplayTz(String(runtimeRes.data.timezone_display ?? "Asia/Jakarta"));
     setServerTz(String(runtimeRes.data.timezone_server ?? "Asia/Gaza"));
-    setReleaseChannel(runtimeRes.data.release_channel === "beta" ? "beta" : "stable");
 
     const af = checklistRes.data?.auto_fetch_status ?? {};
     setAfEnabled(Boolean(af.enabled ?? true));
@@ -445,9 +438,8 @@ export function DataChecklistPage({ sessionToken }: Props) {
     setError("");
     setSuccessText("");
     try {
-      const payload: { mt5_folder: string; fred_api_key?: string; release_channel: "stable" | "beta" } = {
+      const payload: { mt5_folder: string; fred_api_key?: string } = {
         mt5_folder: mt5Folder.trim(),
-        release_channel: releaseChannel,
       };
       const key = fredApiKey.trim();
       if (key) payload.fred_api_key = key;
@@ -470,27 +462,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
     }
   }
 
-
-  async function checkForUpdates() {
-    if (!runtimeConfig) return;
-    setUpdateCheckBusy(true);
-    setError("");
-    setSuccessText("");
-    setUpdateCheckStatus("");
-
-    try {
-      const manifestUrl = String(runtimeConfig.release_manifest_url ?? "").trim();
-      const payload = await checkDesktopUpdateManifest(manifestUrl);
-      const version = String(payload.version ?? payload.tag_name ?? "unknown");
-      const channel = String(payload.channel ?? releaseChannel);
-      setUpdateCheckStatus(`Manifest reachable. Latest ${channel} version: ${version}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Update manifest check failed";
-      setUpdateCheckStatus(`Update check failed: ${msg}`);
-    } finally {
-      setUpdateCheckBusy(false);
-    }
-  }
 
   async function applyTimezoneSettings() {
     setBusyAction("timezone");
@@ -720,48 +691,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
                 </button>
               </div>
 
-              <details className="compact-ops disclosure">
-                <summary className="disclosure-summary">UI Preferences</summary>
-                <div className="form-grid compact">
-                  <div className="form-field">
-                    <label>Top command bar</label>
-                    <select className="control-field"
-                      value={commandBarMode}
-                      onChange={(e) => setCommandBarMode(e.target.value as CommandBarMode)}
-                    >
-                      <option value="full">Full</option>
-                      <option value="slim">Slim</option>
-                      <option value="hidden">Hidden</option>
-                    </select>
-                  </div>
-                </div>
-                <p className="muted">Use full for AMD layout, slim for compact status rail, hidden for sidebar-only workspace.</p>
-              </details>
-              <details className="compact-ops disclosure">
-                <summary className="disclosure-summary">Release Channel</summary>
-                <div className="form-grid compact">
-                  <div className="form-field">
-                    <label>Channel</label>
-                    <select className="control-field"
-                      value={releaseChannel}
-                      onChange={(e) => setReleaseChannel(e.target.value === "beta" ? "beta" : "stable")}
-                    >
-                      <option value="stable">Stable</option>
-                      <option value="beta">Beta</option>
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label>Release Feed</label>
-                    <input className="control-field" value={String(runtimeConfig?.release_manifest_url ?? "")} readOnly />
-                  </div>
-                </div>
-                <div className="row surface-toolbar">
-                  <button type="button" className="btn btn-primary" disabled={updateCheckBusy} onClick={() => void checkForUpdates()}>
-                    {updateCheckBusy ? "Checking..." : "Check for updates"}
-                  </button>
-                </div>
-                {updateCheckStatus && <p className="muted">{updateCheckStatus}</p>}
-              </details>
               <p className="muted">
                 <a href={String(runtimeConfig?.release_base_url ?? "https://github.com")} target="_blank" rel="noreferrer">
                   Download installer manually
