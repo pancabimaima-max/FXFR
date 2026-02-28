@@ -9,7 +9,6 @@ import {
   fetchJob,
   fetchPricePreview,
   fetchRuntimeConfig,
-  postAutoFetchApplySync,
   postCancelJob,
   postFredRefresh,
   postIngestCalendar,
@@ -53,6 +52,20 @@ const timezoneOptions = [
   "Asia/Tokyo",
   "Australia/Sydney",
 ];
+
+function timezoneUtcPrefix(timeZone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "shortOffset",
+    }).formatToParts(new Date());
+    const zone = parts.find((part) => part.type === "timeZoneName")?.value ?? "UTC";
+    const normalized = zone.replace("GMT", "UTC");
+    return normalized === "UTC" ? "UTC+0" : normalized;
+  } catch {
+    return "UTC";
+  }
+}
 
 function isTerminalStatus(status: JobStatus) {
   return terminalStatuses.includes(status);
@@ -113,22 +126,10 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const bootstrap = useAppStore((s) => s.bootstrap);
   const setBootstrap = useAppStore((s) => s.setBootstrap);
 
-  const autoFetch = useMemo(() => {
-    const src = overview?.auto_fetch_status ?? {};
-    return {
-      enabled: Boolean(src.enabled ?? true),
-      interval_hours: Number(src.interval_hours ?? 1),
-      next_update_local: String(src.next_update_local ?? ""),
-      last_sync_local: String(src.last_sync_local ?? ""),
-      price_status: String(src.price_status ?? ""),
-      calendar_status: String(src.calendar_status ?? ""),
-    };
-  }, [overview]);
-
-  const [afEnabled, setAfEnabled] = useState(true);
-  const [afInterval, setAfInterval] = useState(1);
-  const [afPricePattern, setAfPricePattern] = useState("*h1*.csv");
-  const [afCalendarPattern, setAfCalendarPattern] = useState("economic_calendar.csv");
+  const timezoneOptionItems = useMemo(
+    () => timezoneOptions.map((tz) => ({ value: tz, label: `${timezoneUtcPrefix(tz)} ${tz}` })),
+    [],
+  );
 
   const longJobActive = Boolean(activeJob && !isTerminalStatus(activeJob.status));
 
@@ -211,12 +212,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
     setMt5Folder(String(runtimeRes.data.mt5_folder ?? ""));
     setDisplayTz(String(runtimeRes.data.timezone_display ?? "Asia/Jakarta"));
     setServerTz(String(runtimeRes.data.timezone_server ?? "Asia/Gaza"));
-
-    const af = checklistRes.data?.auto_fetch_status ?? {};
-    setAfEnabled(Boolean(af.enabled ?? true));
-    setAfInterval(Math.max(1, Number(af.interval_hours ?? 1)));
-    setAfPricePattern(String(af.price_pattern ?? "*h1*.csv") || "*h1*.csv");
-    setAfCalendarPattern(String(af.calendar_pattern ?? "economic_calendar.csv") || "economic_calendar.csv");
   }
 
   async function loadPreviews() {
@@ -528,28 +523,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
     }
   }
 
-  async function applyAutoFetch(section: "price" | "calendar" | "full") {
-    setBusyAction(`autofetch-${section}`);
-    setError("");
-    setSuccessText("");
-    try {
-      await postAutoFetchApplySync(sessionToken, {
-        section,
-        enabled: afEnabled,
-        mt5_folder: mt5Folder,
-        price_pattern: afPricePattern,
-        calendar_pattern: afCalendarPattern,
-        interval_hours: afInterval,
-      });
-      await Promise.all([loadCore(), loadPreviews()]);
-      setSuccessText(`Auto-fetch ${section} apply/sync completed.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Auto-fetch apply failed");
-    } finally {
-      setBusyAction("");
-    }
-  }
-
   async function refreshFred() {
     setBusyAction("fred-refresh");
     setError("");
@@ -601,6 +574,13 @@ export function DataChecklistPage({ sessionToken }: Props) {
   }
 
   const jobPct = Math.max(0, Math.min(100, Math.round((activeJob?.progress ?? 0) * 100)));
+  const overallStateToken = String(overview?.overall_state ?? "").trim().toUpperCase();
+  const overallStateDetail = String(
+    overview?.overall_detail ?? overview?.detail ?? overview?.overall_reason ?? overview?.error_detail ?? "",
+  ).trim();
+  const overallStateDisplay = overallStateToken === "ERROR"
+    ? overallStateDetail || "Incomplete data (detail unavailable)"
+    : (overview?.overall_state ?? "n/a");
 
   return (
     <section className="checklist-page">
@@ -661,7 +641,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
           <div className="ops-grid-two">
             <div className="panel ops-card runtime-card">
               <h2 className="ops-card-title">Runtime Settings</h2>
-              <p className="muted">Configure MT5 folder and FRED key, then Apply.</p>
+              <p className="muted">Configure MT5 folder, then Apply.</p>
               <div className="form-grid">
                 <div className="form-field">
                   <label htmlFor="mt5-folder">MT5 Data Folder</label>
@@ -670,16 +650,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
                     value={mt5Folder}
                     onChange={(e) => setMt5Folder(e.target.value)}
                     placeholder="C:\\Users\\...\\MetaQuotes\\Terminal\\Common\\Files"
-                  />
-                </div>
-                <div className="form-field">
-                  <label htmlFor="fred-key">FRED API Key (optional overwrite)</label>
-                  <input className="control-field"
-                    id="fred-key"
-                    type="password"
-                    value={fredApiKey}
-                    onChange={(e) => setFredApiKey(e.target.value)}
-                    placeholder={runtimeConfig?.fred_key_configured ? "Configured. Enter new key to overwrite." : "Enter key to enable macro module"}
                   />
                 </div>
               </div>
@@ -694,11 +664,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
                 </button>
               </div>
 
-              <p className="muted">
-                <a href={String(runtimeConfig?.release_base_url ?? "https://github.com")} target="_blank" rel="noreferrer">
-                  Download installer manually
-                </a>
-              </p>
             </div>
 
             <div className="panel ops-card timezone-card">
@@ -707,9 +672,9 @@ export function DataChecklistPage({ sessionToken }: Props) {
                 <div className="form-field">
                   <label>Local Time</label>
                   <select className="control-field" value={displayTz} onChange={(e) => setDisplayTz(e.target.value)}>
-                    {timezoneOptions.map((tz) => (
-                      <option key={tz} value={tz}>
-                        {tz}
+                    {timezoneOptionItems.map((tz) => (
+                      <option key={tz.value} value={tz.value}>
+                        {tz.label}
                       </option>
                     ))}
                   </select>
@@ -717,9 +682,9 @@ export function DataChecklistPage({ sessionToken }: Props) {
                 <div className="form-field">
                   <label>Server Time</label>
                   <select className="control-field" value={serverTz} onChange={(e) => setServerTz(e.target.value)}>
-                    {timezoneOptions.map((tz) => (
-                      <option key={tz} value={tz}>
-                        {tz}
+                    {timezoneOptionItems.map((tz) => (
+                      <option key={tz.value} value={tz.value}>
+                        {tz.label}
                       </option>
                     ))}
                   </select>
@@ -736,7 +701,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
           <div className="panel-grid overview-kpi-grid">
             <div className="panel ops-card overview-kpi-card">
               <h2 className="ops-card-title">Overall State</h2>
-              <p className="overview-kpi-value">{overview?.overall_state ?? "n/a"}</p>
+              <p className="overview-kpi-value">{overallStateDisplay}</p>
               <p className="muted overview-kpi-caption">Total score: {overview?.total_score ?? "n/a"}</p>
               <p className="muted overview-kpi-caption">Local clock: {overview?.market_session?.local_time ?? "n/a"}</p>
               <p className="muted overview-kpi-caption">Market session: {overview?.market_session?.label ?? "n/a"}</p>
@@ -764,9 +729,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
                   </li>
                 ))}
               </ul>
-              <p className="muted overview-kpi-caption">
-                Next update (Local): {overview?.auto_fetch_status?.next_update_local ?? autoFetch.next_update_local ?? "n/a"}
-              </p>
             </div>
           </div>
 
@@ -804,40 +766,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
           </div>
 
           <div className="panel ops-card">
-            <h2 className="ops-card-title">Auto-fetch Price Candle Data</h2>
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Enable auto-fetch</label>
-                <select className="control-field" value={afEnabled ? "yes" : "no"} onChange={(e) => setAfEnabled(e.target.value === "yes")}>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
-              </div>
-              <div className="form-field">
-                <label>Price pattern</label>
-                <input className="control-field" value={afPricePattern} onChange={(e) => setAfPricePattern(e.target.value)} />
-              </div>
-              <div className="form-field">
-                <label>Auto-fetch interval (hours)</label>
-                <input className="control-field"
-                  type="number"
-                  min={1}
-                  value={afInterval}
-                  onChange={(e) => setAfInterval(Math.max(1, Number(e.target.value || 1)))}
-                />
-              </div>
-            </div>
-            <p className="muted">Last sync: {overview?.auto_fetch_status?.last_sync_local || autoFetch.last_sync_local || "n/a"}</p>
-            <p className="muted">Next update: {overview?.auto_fetch_status?.next_update_local || autoFetch.next_update_local || "n/a"}</p>
-            <p className="muted">Status: {overview?.auto_fetch_status?.price_status || autoFetch.price_status || "n/a"}</p>
-            <div className="row surface-toolbar">
-              <button type="button" className="btn btn-primary" disabled={longJobActive || busyAction === "autofetch-price"} onClick={() => void applyAutoFetch("price")}>
-                {busyAction === "autofetch-price" ? "Applying..." : "Apply"}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel ops-card">
             <h2 className="ops-card-title">Price Preview (50 rows)</h2>
             <DataTable rows={pricePreviewRows} emptyText="No price data loaded." />
           </div>
@@ -863,38 +791,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
           </div>
 
           <div className="panel ops-card">
-            <h2 className="ops-card-title">Auto-fetch Economic Calendar Data</h2>
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Enable auto-fetch</label>
-                <select className="control-field" value={afEnabled ? "yes" : "no"} onChange={(e) => setAfEnabled(e.target.value === "yes")}>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
-              </div>
-              <div className="form-field">
-                <label>Calendar pattern</label>
-                <input className="control-field" value={afCalendarPattern} onChange={(e) => setAfCalendarPattern(e.target.value)} />
-              </div>
-              <div className="form-field">
-                <label>Auto-fetch interval (hours)</label>
-                <input className="control-field"
-                  type="number"
-                  min={1}
-                  value={afInterval}
-                  onChange={(e) => setAfInterval(Math.max(1, Number(e.target.value || 1)))}
-                />
-              </div>
-            </div>
-            <p className="muted">Status: {overview?.auto_fetch_status?.calendar_status || autoFetch.calendar_status || "n/a"}</p>
-            <div className="row surface-toolbar">
-              <button type="button" className="btn btn-primary" disabled={longJobActive || busyAction === "autofetch-calendar"} onClick={() => void applyAutoFetch("calendar")}>
-                {busyAction === "autofetch-calendar" ? "Applying..." : "Apply"}
-              </button>
-            </div>
-          </div>
-
-          <div className="panel ops-card">
             <h2 className="ops-card-title">Calendar Preview (50 rows)</h2>
             <DataTable rows={calendarPreviewRows} emptyText="No calendar data loaded." />
           </div>
@@ -906,7 +802,18 @@ export function DataChecklistPage({ sessionToken }: Props) {
           <div className="panel ops-card">
             <h2 className="ops-card-title">FRED Data</h2>
             <p className="muted">Policy and Inflation source tables with per-series status/error rows.</p>
-            <div className="row surface-toolbar">
+            <div className="fred-action-row surface-toolbar">
+              <div className="fred-key-inline">
+                <label htmlFor="fred-key-inline">FRED API Key (optional overwrite)</label>
+                <input
+                  className="control-field"
+                  id="fred-key-inline"
+                  type="password"
+                  value={fredApiKey}
+                  onChange={(e) => setFredApiKey(e.target.value)}
+                  placeholder={runtimeConfig?.fred_key_configured ? "Configured. Enter new key to overwrite." : "Enter key to enable macro module"}
+                />
+              </div>
               <button type="button" className="btn btn-primary" disabled={longJobActive || busyAction === "fred-refresh"} onClick={() => void refreshFred()}>
                 {busyAction === "fred-refresh" ? "Queuing..." : "Refresh FRED Data"}
               </button>

@@ -866,6 +866,26 @@ button:focus-visible:not(.btn) {
   margin-top: 8px;
 }
 
+.fred-action-row {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) auto;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fred-key-inline {
+  display: grid;
+  gap: 6px;
+}
+
+.fred-key-inline label {
+  color: var(--fx-color-text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .carry-table-shell {
   background: var(--fx-color-surface-ops-inset);
 }
@@ -1492,6 +1512,12 @@ textarea.control-field,
 select.control-field {
   width: 100%;
   padding: 10px;
+}
+
+/* Ensure native select dropdown options stay readable on Windows light popups. */
+select.control-field option {
+  color: #111;
+  background: #f3f3f3;
 }
 
 input.control-field:hover,
