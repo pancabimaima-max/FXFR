@@ -142,6 +142,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const [eventStreamState, setEventStreamState] = useState<EngineStreamState>("connecting");
   const [lastEventAt, setLastEventAt] = useState("");
   const handledTerminalJobsRef = useRef<Set<string>>(new Set());
+  const lastEngineEventAtMsRef = useRef<number>(Date.now());
 
   const bootstrap = useAppStore((s) => s.bootstrap);
   const setBootstrap = useAppStore((s) => s.setBootstrap);
@@ -190,6 +191,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
   const handleEngineEvent = useCallback((event: WsEvent) => {
     setLastEventAt(String(event.timestamp_utc ?? ""));
+    lastEngineEventAtMsRef.current = Date.now();
 
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     const eventData = payload.data && typeof payload.data === "object"
@@ -322,6 +324,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
             return;
           }
           retryMs = 700;
+          lastEngineEventAtMsRef.current = Date.now();
           setEventStreamState("live");
         },
         onEvent: (event) => {
@@ -362,11 +365,21 @@ export function DataChecklistPage({ sessionToken }: Props) {
   }, [sessionToken, handleEngineEvent]);
 
   useEffect(() => {
-    if (!activeJob || isTerminalStatus(activeJob.status) || eventStreamState === "live") {
+    if (!activeJob || isTerminalStatus(activeJob.status)) {
       return;
     }
 
     let stop = false;
+    let timer: number | undefined;
+
+    const pollIntervalMs = () => {
+      const streamIsStale = eventStreamState === "live" && Date.now() - lastEngineEventAtMsRef.current > 10_000;
+      if (eventStreamState === "live" && !streamIsStale) {
+        return 3_500;
+      }
+      return 900;
+    };
+
     const poll = async () => {
       try {
         const res = await fetchJob(sessionToken, activeJob.job_id);
@@ -391,14 +404,23 @@ export function DataChecklistPage({ sessionToken }: Props) {
       }
     };
 
+    const loop = () => {
+      timer = window.setTimeout(async () => {
+        await poll();
+        if (!stop) {
+          loop();
+        }
+      }, pollIntervalMs());
+    };
+
     void poll();
-    const timer = window.setInterval(() => {
-      void poll();
-    }, 900);
+    loop();
 
     return () => {
       stop = true;
-      window.clearInterval(timer);
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
     };
   }, [activeJob?.job_id, activeJob?.status, eventStreamState, sessionToken]);
 

@@ -1,6 +1,14 @@
-﻿import type { WsEvent } from "@fxfr/contracts";
+import type { WsEvent } from "@fxfr/contracts";
 
-const API_BASE = import.meta.env.VITE_ENGINE_URL ?? "http://127.0.0.1:8765";
+function resolveApiBase() {
+  if (typeof window !== "undefined") {
+    const runtimeUrl = (window as Window & { __FXFR_ENGINE_URL?: string }).__FXFR_ENGINE_URL;
+    if (runtimeUrl && runtimeUrl.trim().length > 0) {
+      return runtimeUrl;
+    }
+  }
+  return import.meta.env.VITE_ENGINE_URL ?? "http://127.0.0.1:8765";
+}
 
 export type EngineEventHandlers = {
   onOpen?: () => void;
@@ -11,8 +19,9 @@ export type EngineEventHandlers = {
 
 export function buildEngineEventsUrl(sessionToken: string): string {
   const token = String(sessionToken || "").trim();
+  const apiBase = resolveApiBase();
   try {
-    const base = new URL(API_BASE);
+    const base = new URL(apiBase);
     base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
     base.pathname = "/ws/events";
     base.search = "";

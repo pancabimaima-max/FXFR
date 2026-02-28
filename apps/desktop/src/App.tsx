@@ -136,6 +136,11 @@ export function App() {
   const [sidecarInfo, setSidecarInfo] = useState<EngineRuntimeInfo | null>(null);
   const engineUrl = sidecarInfo?.engine_url ?? (import.meta.env.VITE_ENGINE_URL ?? "http://127.0.0.1:8765");
 
+  useEffect(() => {
+    const scopedWindow = window as Window & { __FXFR_ENGINE_URL?: string };
+    scopedWindow.__FXFR_ENGINE_URL = engineUrl;
+  }, [engineUrl]);
+
   const runBootstrap = useCallback(async () => {
     setLoading(true);
     setError("");

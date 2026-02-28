@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   FundamentalDifferentialData,
   ResponseEnvelope,
   RuntimeConfigApplyData,
@@ -6,7 +6,15 @@
   SwapConfigData,
 } from "@fxfr/contracts";
 
-const API_BASE = import.meta.env.VITE_ENGINE_URL ?? "http://127.0.0.1:8765";
+function resolveApiBase() {
+  if (typeof window !== "undefined") {
+    const runtimeUrl = (window as Window & { __FXFR_ENGINE_URL?: string }).__FXFR_ENGINE_URL;
+    if (runtimeUrl && runtimeUrl.trim().length > 0) {
+      return runtimeUrl;
+    }
+  }
+  return import.meta.env.VITE_ENGINE_URL ?? "http://127.0.0.1:8765";
+}
 
 function withQuery(path: string, params?: Record<string, string | number | boolean | undefined>) {
   if (!params) return path;
@@ -24,6 +32,7 @@ async function request<T>(
   opts: RequestInit = {},
   sessionToken?: string,
 ): Promise<ResponseEnvelope<T>> {
+  const apiBase = resolveApiBase();
   const headers = new Headers(opts.headers ?? {});
   if (sessionToken) {
     headers.set("x-session-token", sessionToken);
@@ -36,12 +45,12 @@ async function request<T>(
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    response = await fetch(`${apiBase}${path}`, {
       ...opts,
       headers,
     });
   } catch {
-    throw new Error(`Cannot reach engine at ${API_BASE}. Start the engine service and retry.`);
+    throw new Error(`Cannot reach engine at ${apiBase}. Start the engine service and retry.`);
   }
 
   if (!response.ok) {
