@@ -80,8 +80,8 @@ export async function fetchBootstrap() {
   }>("/v1/bootstrap");
 }
 
-export async function fetchChecklist(sessionToken: string) {
-  return request<any>("/v1/checklist/overview", { method: "GET" }, sessionToken);
+export async function fetchChecklist(sessionToken: string, symbol?: string) {
+  return request<any>(withQuery("/v1/checklist/overview", { symbol }), { method: "GET" }, sessionToken);
 }
 
 export async function fetchRuntimeConfig(sessionToken: string) {
@@ -179,9 +179,9 @@ export async function postAutoFetchApplySync(
   );
 }
 
-export async function fetchPricePreview(sessionToken: string, limit = 50) {
+export async function fetchPricePreview(sessionToken: string, limit = 50, symbol?: string) {
   return request<{ rows: Record<string, unknown>[]; count: number }>(
-    withQuery("/v1/preview/price", { limit }),
+    withQuery("/v1/preview/price", { limit, symbol }),
     { method: "GET" },
     sessionToken,
   );

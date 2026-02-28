@@ -146,6 +146,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
   const bootstrap = useAppStore((s) => s.bootstrap);
   const setBootstrap = useAppStore((s) => s.setBootstrap);
+  const activePair = useAppStore((s) => s.activePair);
 
   const timezoneOptions = useMemo(() => resolveTimezoneOptions(), []);
   const timezoneOptionItems = useMemo(
@@ -226,7 +227,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
   async function loadCore() {
     const [checklistRes, runtimeRes] = await Promise.all([
-      fetchChecklist(sessionToken),
+      fetchChecklist(sessionToken, activePair),
       fetchRuntimeConfig(sessionToken),
     ]);
 
@@ -238,7 +239,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
   async function loadPreviews() {
     const [priceRes, calendarRes] = await Promise.all([
-      fetchPricePreview(sessionToken, 50),
+      fetchPricePreview(sessionToken, 50, activePair),
       fetchCalendarPreview(sessionToken, 50),
     ]);
     setPricePreviewRows(priceRes.data.rows ?? []);
@@ -304,7 +305,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, reloadSeed]);
+  }, [sessionToken, reloadSeed, activePair]);
 
   useEffect(() => {
     let closed = false;
@@ -771,7 +772,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
           </div>
 
           <div className="panel ops-card">
-            <h2 className="ops-card-title">Price Preview (50 rows)</h2>
+            <h2 className="ops-card-title">Price Preview (Newest 50 rows for {activePair})</h2>
             <DataTable rows={pricePreviewRows} emptyText="No price data loaded." />
           </div>
         </>

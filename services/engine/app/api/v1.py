@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import os
@@ -262,6 +262,36 @@ def _to_rows(df: pd.DataFrame, limit: int = 50) -> list[dict]:
                 item[str(key)] = str(val)
         rows.append(item)
     return rows
+
+
+def _build_symbol_price_meta(df: pd.DataFrame, symbol: str) -> dict | None:
+    if df.empty:
+        return None
+    token = str(symbol or "").strip().upper()
+    if not token:
+        return None
+
+    out = df[df["Symbol"].astype(str).str.upper() == token].copy()
+    if out.empty:
+        return None
+
+    out["TimeUTC"] = pd.to_datetime(out["TimeUTC"], errors="coerce", utc=True)
+    out = out.dropna(subset=["TimeUTC"]).sort_values("TimeUTC")
+    if out.empty:
+        return None
+
+    diffs = out["TimeUTC"].diff().dropna().dt.total_seconds().div(3600.0)
+    missing = diffs[diffs > 1.0].apply(lambda h: max(0, int(round(h - 1.0))))
+    gap_count = int(missing.sum())
+    max_ts = out["TimeUTC"].max()
+    min_ts = out["TimeUTC"].min()
+    return {
+        "symbol": token,
+        "rows_loaded": int(len(out)),
+        "gap_count": gap_count,
+        "min_time_utc": min_ts.isoformat() if hasattr(min_ts, "isoformat") else "",
+        "max_time_utc": max_ts.isoformat() if hasattr(max_ts, "isoformat") else "",
+    }
 
 
 def _read_file_logs(log_path: Path, levels: set[str], lookback_hours: int, limit: int) -> list[dict]:
@@ -761,11 +791,17 @@ def get_fundamental_differential(
 
 
 @router.get("/checklist/overview", dependencies=[Depends(_must_auth)])
-def get_checklist_overview(request: Request):
+def get_checklist_overview(request: Request, symbol: str | None = Query(default=None)):
     services = _service(request)
     state = services["state"].load_runtime_state()
     price_meta = services["db"].get_setting("latest_price_meta", None)
     cal_meta = services["db"].get_setting("latest_calendar_meta", None)
+    price_path = services["settings"].parquet_dir / "price_latest.parquet"
+    price_df = _load_price_df(price_path)
+    active_symbol = str(symbol or "").strip().upper()
+    if not active_symbol and state.top_pairs:
+        active_symbol = str(state.top_pairs[0]).strip().upper()
+    price_symbol_meta = _build_symbol_price_meta(price_df, active_symbol)
     policy_rows = services["db"].get_macro_snapshot("policy")
     inflation_rows = services["db"].get_macro_snapshot("inflation")
     auto_cfg_obj = load_autofetch_config(services["db"])
@@ -783,21 +819,33 @@ def get_checklist_overview(request: Request):
     }
     overview = build_checklist_overview(
         price_meta=price_meta,
+        price_symbol_meta=price_symbol_meta,
         calendar_meta=cal_meta,
         macro_policy_rows=policy_rows,
         macro_inflation_rows=inflation_rows,
         macro_enabled=services["settings"].macro_enabled,
         ui_timezone=state.display_timezone or DISPLAY_TZ_DEFAULT,
         auto_fetch_config=auto_cfg,
+        active_symbol=active_symbol,
     )
     return envelope(request, overview)
 
 
 @router.get("/preview/price", dependencies=[Depends(_must_auth)])
-def get_price_preview(request: Request, limit: int = Query(default=50, ge=1, le=500)):
+def get_price_preview(request: Request, limit: int = Query(default=50, ge=1, le=500), symbol: str | None = Query(default=None)):
     services = _service(request)
     path = services["settings"].parquet_dir / "price_latest.parquet"
     df = _load_price_df(path)
+    if df.empty:
+        return envelope(request, {"rows": [], "count": 0})
+
+    token = str(symbol or "").strip().upper()
+    if token:
+        df = df[df["Symbol"].astype(str).str.upper() == token].copy()
+        if df.empty:
+            return envelope(request, {"rows": [], "count": 0})
+
+    df = df.sort_values("TimeUTC", ascending=False)
     return envelope(request, {"rows": _to_rows(df, limit=int(limit)), "count": int(len(df))})
 
 

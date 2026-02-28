@@ -109,12 +109,14 @@ def _market_session_snapshot(ui_timezone: str) -> dict[str, Any]:
 def build_checklist_overview(
     *,
     price_meta: dict | None,
+    price_symbol_meta: dict | None,
     calendar_meta: dict | None,
     macro_policy_rows: list[dict],
     macro_inflation_rows: list[dict],
     macro_enabled: bool,
     ui_timezone: str,
     auto_fetch_config: dict | None,
+    active_symbol: str = "",
 ) -> dict[str, Any]:
     sections: list[dict] = []
     timeline: list[dict] = []
@@ -123,7 +125,18 @@ def build_checklist_overview(
     price_state = _state_from_age(price_age, PRICE_READY_HOURS, PRICE_WARN_HOURS) if price_meta else "error"
     price_detail = "Not loaded."
     if price_meta:
-        price_detail = f"Latest local candle age: {_fmt_age(price_age)}; gaps={int(price_meta.get('gap_count', 0))}."
+        aggregate_detail = f"Aggregate latest local candle age: {_fmt_age(price_age)}; gaps={int(price_meta.get('gap_count', 0))}."
+        symbol_detail = ""
+        token = str(active_symbol or "").strip().upper()
+        if price_symbol_meta and token:
+            symbol_age = age_hours_from_iso(str(price_symbol_meta.get("max_time_utc", "")))
+            symbol_detail = (
+                f" Active {token} latest local candle age: {_fmt_age(symbol_age)};"
+                f" gaps={int(price_symbol_meta.get('gap_count', 0))}."
+            )
+        elif token:
+            symbol_detail = f" Active {token}: no rows in current price dataset."
+        price_detail = f"{aggregate_detail}{symbol_detail}"
         timeline.append(
             {
                 "section": "H1 Candle Data",
@@ -230,6 +243,7 @@ def build_checklist_overview(
     return {
         "overall_state": overall,
         "total_score": total_score,
+        "active_symbol": str(active_symbol or "").strip().upper(),
         "sections": sections,
         "action_queue": actions,
         "freshness_timeline": timeline,
