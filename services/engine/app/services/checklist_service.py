@@ -261,8 +261,6 @@ def build_checklist_overview(
         actions.append({"done": False, "text": "Refresh FRED Data and review failing series."})
     if not macro_enabled:
         actions.append({"done": False, "text": "Add FRED key to enable macro modules."})
-    if auto_fetch_status["enabled"] and auto_fetch_status["due"]:
-        actions.append({"done": False, "text": "Run auto-fetch Apply to sync latest files."})
     if not actions:
         actions.append({"done": True, "text": "All checklist sections are healthy."})
 

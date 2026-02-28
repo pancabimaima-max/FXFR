@@ -727,6 +727,40 @@ button:focus-visible:not(.btn) {
   font-size: 0.84rem;
 }
 
+.health-score-widget {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 8px;
+}
+
+.health-score-ring {
+  --health-score: 0%;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: conic-gradient(var(--fx-color-accent-secondary) var(--health-score), var(--fx-color-surface-border) 0);
+}
+
+.health-score-ring::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--fx-color-surface-ops-card);
+}
+
+.health-score-ring span {
+  position: relative;
+  z-index: 1;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--fx-color-text-primary);
+}
+
 .ops-list {
   list-style: none;
   margin: 8px 0 0;
@@ -831,6 +865,29 @@ button:focus-visible:not(.btn) {
 
 .tools-input-grid {
   margin-bottom: 2px;
+}
+
+.tools-precalc-context {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tools-context-card {
+  border: 1px solid var(--fx-color-surface-border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--fx-color-surface-ops-inset) 0%, var(--fx-color-surface-ops-card) 100%);
+  padding: 10px;
+}
+
+.tools-context-card h3 {
+  margin: 0 0 6px;
+  font-size: 0.92rem;
+  color: var(--fx-color-text-ops-heading);
+}
+
+.tools-context-card p {
+  margin: 0;
 }
 
 .tools-hero-metrics {

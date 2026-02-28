@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   fetchDashboardCards,
@@ -55,6 +55,29 @@ function formatSigned(value: unknown): string {
   return asNum > 0 ? `+${asNum.toFixed(2)}` : asNum.toFixed(2);
 }
 
+function getPolicyRateForCurrency(rows: Record<string, unknown>[], currency: string): string {
+  const token = String(currency || "").trim().toUpperCase();
+  if (!token) return "n/a";
+  const row = rows.find((item) => String(item?.currency ?? "").trim().toUpperCase() === token);
+  if (!row || String(row.status ?? "").toLowerCase() !== "ok") {
+    return "n/a";
+  }
+  const raw = Number(row.value);
+  return Number.isFinite(raw) ? `${raw.toFixed(2)}%` : "n/a";
+}
+
+function getInflationForCurrency(rows: Record<string, unknown>[], currency: string, mode: "yoy" | "mom"): string {
+  const token = String(currency || "").trim().toUpperCase();
+  if (!token) return "n/a";
+  const row = rows.find((item) => String(item?.currency ?? "").trim().toUpperCase() === token);
+  if (!row || String(row.status ?? "").toLowerCase() !== "ok") {
+    return "n/a";
+  }
+  const aux = (row.aux ?? {}) as Record<string, unknown>;
+  const raw = Number(aux[mode]);
+  return Number.isFinite(raw) ? `${raw.toFixed(2)}%` : "n/a";
+}
+
 export function FundamentalToolsPage({ sessionToken }: Props) {
   const [activeTab, setActiveTab] = useState<ToolTab>("Calculator");
   const activePair = useAppStore((s) => s.activePair);
@@ -78,6 +101,10 @@ export function FundamentalToolsPage({ sessionToken }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const basePolicyRate = getPolicyRateForCurrency(policyRows, base);
+  const quotePolicyRate = getPolicyRateForCurrency(policyRows, quote);
+  const baseInflation = getInflationForCurrency(inflRows, base, mode);
+  const quoteInflation = getInflationForCurrency(inflRows, quote, mode);
 
   async function loadSources() {
     const [policy, inflation] = await Promise.all([
@@ -253,7 +280,6 @@ export function FundamentalToolsPage({ sessionToken }: Props) {
     <section className="tools-page">
       <div className="tools-header-row">
         <h1>Fundamental Tools</h1>
-        <p className="muted">Experimental workspace. Promote validated metrics to Dashboard.</p>
       </div>
       <div className="tab-row">
         {tabs.map((tab) => (
@@ -297,6 +323,18 @@ export function FundamentalToolsPage({ sessionToken }: Props) {
                 <option value="yoy">YoY</option>
                 <option value="mom">MoM</option>
               </select>
+            </div>
+          </div>
+          <div className="tools-precalc-context">
+            <div className="panel tools-context-card">
+              <h3>Base ({base})</h3>
+              <p className="muted">Policy rate: <strong>{basePolicyRate}</strong></p>
+              <p className="muted">Inflation ({mode.toUpperCase()}): <strong>{baseInflation}</strong></p>
+            </div>
+            <div className="panel tools-context-card">
+              <h3>Quote ({quote})</h3>
+              <p className="muted">Policy rate: <strong>{quotePolicyRate}</strong></p>
+              <p className="muted">Inflation ({mode.toUpperCase()}): <strong>{quoteInflation}</strong></p>
             </div>
           </div>
           <div className="row surface-toolbar">

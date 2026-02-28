@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { WsEvent } from "@fxfr/contracts";
 
@@ -653,6 +653,8 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const overallStateDisplay = overallStateToken === "ERROR"
     ? overallStateDetail || "Incomplete data (detail unavailable)"
     : (overview?.overall_state ?? "n/a");
+  const overallScoreRaw = Number(overview?.total_score);
+  const overallScorePct = Number.isFinite(overallScoreRaw) ? Math.max(0, Math.min(100, Math.round(overallScoreRaw))) : 0;
 
   return (
     <section className="checklist-page">
@@ -745,6 +747,12 @@ export function DataChecklistPage({ sessionToken }: Props) {
             <div className="panel ops-card overview-kpi-card">
               <h2 className="ops-card-title">Overall State</h2>
               <p className="overview-kpi-value">{overallStateDisplay}</p>
+              <div className="health-score-widget">
+                <div className="health-score-ring" style={{ "--health-score": `${overallScorePct}%` } as CSSProperties}>
+                  <span>{overallScorePct}%</span>
+                </div>
+                <p className="muted overview-kpi-caption">Section health score</p>
+              </div>
               <p className="muted overview-kpi-caption">Total score: {overview?.total_score ?? "n/a"}</p>
               <p className="muted overview-kpi-caption">Local clock: {overview?.market_session?.local_time ?? "n/a"}</p>
               <p className="muted overview-kpi-caption">Market session: {overview?.market_session?.label ?? "n/a"}</p>
