@@ -1,0 +1,94 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"
+      - name: Install engine deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r services/engine/requirements.txt
+      - name: Engine tests
+        env:
+          FRED_API_KEY: ""
+        run: |
+          cd services/engine
+          python -m unittest discover -s tests -p "test_*.py" -v
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - name: Install
+        run: pnpm install
+      - name: Typecheck
+        run: pnpm typecheck:desktop
+      - name: Lint
+        run: pnpm lint:desktop
+
+  packaging-smoke:
+    runs-on: windows-latest
+    needs: [engine, desktop]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend deps
+        run: pnpm install
+
+      - name: Create engine venv
+        shell: pwsh
+        run: |
+          python -m venv services\engine\.venv
+
+      - name: Build engine sidecar
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts\desktop\build_engine_sidecar.ps1 -Channel stable
+
+      - name: Build desktop bundle
+        run: pnpm --filter @fxfr/desktop tauri:build
+
+      - name: Verify package artifacts
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps\desktop\src-tauri\tauri.conf.json | ConvertFrom-Json).version
+          powershell -ExecutionPolicy Bypass -File scripts\desktop\verify_package_artifacts.ps1 -Channel stable -Version $version
+
+      - name: Upload packaging artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fxfr-packaging-smoke
+          path: artifacts/*
+          if-no-files-found: error

@@ -1,0 +1,42 @@
+{
+  "cards": [
+    {
+      "inflation_reason": "ok",
+      "metrics": {
+        "atr14_h1_pips": 14.0,
+        "atr14_h1_raw": 0.0014,
+        "carry_estimator": -2.1,
+        "daily_atr_pct_average": null,
+        "inflation_differential": -1.1,
+        "rate_differential": -2.0,
+        "rate_trend": "Rising",
+        "strength_meter": 46.71,
+        "swap_drag_bps": 10.0
+      },
+      "rate_reason": "ok",
+      "readiness": "ready",
+      "readiness_reason": "ATR and macro differentials are available.",
+      "symbol": "EURUSD"
+    },
+    {
+      "inflation_reason": "ok",
+      "metrics": {
+        "atr14_h1_pips": 20.0,
+        "atr14_h1_raw": 0.2,
+        "carry_estimator": 4.9,
+        "daily_atr_pct_average": null,
+        "inflation_differential": 2.2,
+        "rate_differential": 4.9,
+        "rate_trend": "Mixed",
+        "strength_meter": 59.7,
+        "swap_drag_bps": 0.0
+      },
+      "rate_reason": "ok",
+      "readiness": "ready",
+      "readiness_reason": "ATR and macro differentials are available.",
+      "symbol": "USDJPY"
+    }
+  ],
+  "filtered_symbols": 2,
+  "total_symbols": 2
+}

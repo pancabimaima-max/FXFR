@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fx-fundamentals-refresher.local/schemas/runtime-config.response.schema.json",
+  "title": "RuntimeConfigResponse",
+  "type": "object",
+  "required": [
+    "meta",
+    "data"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "common.schema.json#/definitions/ResponseMeta"
+    },
+    "error": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/definitions/ErrorObject"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "python_version",
+        "timezone_display",
+        "timezone_server",
+        "timezone_storage",
+        "macro_enabled",
+        "fred_key_configured",
+        "release_channel",
+        "release_base_url",
+        "release_manifest_url"
+      ],
+      "properties": {
+        "python_version": {
+          "type": "string"
+        },
+        "timezone_display": {
+          "type": "string"
+        },
+        "timezone_server": {
+          "type": "string"
+        },
+        "timezone_storage": {
+          "type": "string"
+        },
+        "macro_enabled": {
+          "type": "boolean"
+        },
+        "macro_disabled_reason": {
+          "type": "string"
+        },
+        "fred_key_configured": {
+          "type": "boolean"
+        },
+        "worker_pool_size": {
+          "type": "integer"
+        },
+        "first_launch_complete": {
+          "type": "boolean"
+        },
+        "mt5_folder": {
+          "type": "string"
+        },
+        "top_pairs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "release_channel": {
+          "type": "string",
+          "enum": ["stable", "beta"]
+        },
+        "release_base_url": {
+          "type": "string"
+        },
+        "release_manifest_url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

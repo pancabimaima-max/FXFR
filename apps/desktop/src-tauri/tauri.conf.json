@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FX Fundamentals Refresher",
+  "version": "0.1.0",
+  "identifier": "com.fyodor.fxfr",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "FX Fundamentals Refresher",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 1280,
+        "minHeight": 760
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "msi"
+    ],
+    "resources": [
+      "resources/engine"
+    ],
+    "icon": ["icons/icon.ico"]
+  }
+}

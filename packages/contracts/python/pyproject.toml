@@ -1,0 +1,12 @@
+[project]
+name = "fxfr-contracts"
+version = "1.0.0"
+description = "Shared contracts for FX Fundamentals Refresher desktop and engine."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "pydantic>=2.7,<3.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

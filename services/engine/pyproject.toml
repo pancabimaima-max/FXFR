@@ -1,0 +1,9 @@
+[project]
+name = "fxfr-engine"
+version = "0.1.0"
+description = "Desktop compute engine for FX Fundamentals Refresher"
+requires-python = "==3.12.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fx-fundamentals-refresher.local/schemas/ws-event.schema.json",
+  "title": "WsEvent",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp_utc",
+    "trace_id",
+    "event_name",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "event_name": {
+      "type": "string",
+      "enum": [
+        "job.started",
+        "job.progress",
+        "job.completed",
+        "job.failed",
+        "job.cancelled",
+        "data.updated",
+        "alerts.state_changed"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

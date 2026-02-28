@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fx-fundamentals-refresher.local/schemas/logs.response.schema.json",
+  "title": "LogsResponse",
+  "type": "object",
+  "required": ["meta", "data"],
+  "properties": {
+    "meta": { "$ref": "common.schema.json#/definitions/ResponseMeta" },
+    "error": { "$ref": "common.schema.json#/definitions/ErrorObject" },
+    "data": {
+      "type": "object",
+      "required": ["rows"],
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["timestamp_utc", "level", "message"],
+            "properties": {
+              "timestamp_utc": { "type": "string" },
+              "level": { "type": "string" },
+              "message": { "type": "string" },
+              "context": { "type": "object", "additionalProperties": true }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

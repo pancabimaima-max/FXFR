@@ -1,0 +1,9 @@
+﻿{
+  "version": "0.1.0",
+  "channel": "stable",
+  "sev1_sev2_zero_last_7d": false,
+  "paper_trading_7d_complete": false,
+  "notes": "Fill this file for release sign-off.",
+  "approved_by": "",
+  "approved_at_utc": ""
+}

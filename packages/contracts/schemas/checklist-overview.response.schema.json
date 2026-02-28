@@ -1,0 +1,118 @@
+{
+    "$schema":  "https://json-schema.org/draft/2020-12/schema",
+    "$id":  "https://fx-fundamentals-refresher.local/schemas/checklist-overview.response.schema.json",
+    "title":  "ChecklistOverviewResponse",
+    "type":  "object",
+    "required":  [
+                     "meta",
+                     "data"
+                 ],
+    "properties":  {
+                       "meta":  {
+                                    "$ref":  "common.schema.json#/definitions/ResponseMeta"
+                                },
+                       "error":  {
+                                     "oneOf":  [
+                                                   {
+                                                       "$ref":  "common.schema.json#/definitions/ErrorObject"
+                                                   },
+                                                   {
+                                                       "type":  "null"
+                                                   }
+                                               ]
+                                 },
+                       "data":  {
+                                    "type":  "object",
+                                    "required":  [
+                                                     "overall_state",
+                                                     "total_score",
+                                                     "sections",
+                                                     "action_queue",
+                                                     "freshness_timeline",
+                                                     "market_session",
+                                                     "auto_fetch_status"
+                                                 ],
+                                    "properties":  {
+                                                       "overall_state":  {
+                                                                             "type":  "string",
+                                                                             "enum":  [
+                                                                                          "ready",
+                                                                                          "warn",
+                                                                                          "error"
+                                                                                      ]
+                                                                         },
+                                                       "total_score":  {
+                                                                           "type":  "number"
+                                                                       },
+                                                       "sections":  {
+                                                                        "type":  "array",
+                                                                        "items":  {
+                                                                                      "type":  "object",
+                                                                                      "required":  [
+                                                                                                       "name",
+                                                                                                       "state",
+                                                                                                       "score",
+                                                                                                       "detail"
+                                                                                                   ],
+                                                                                      "properties":  {
+                                                                                                         "name":  {
+                                                                                                                      "type":  "string"
+                                                                                                                  },
+                                                                                                         "state":  {
+                                                                                                                       "type":  "string",
+                                                                                                                       "enum":  [
+                                                                                                                                    "ready",
+                                                                                                                                    "warn",
+                                                                                                                                    "error"
+                                                                                                                                ]
+                                                                                                                   },
+                                                                                                         "score":  {
+                                                                                                                       "type":  "number"
+                                                                                                                   },
+                                                                                                         "detail":  {
+                                                                                                                        "type":  "string"
+                                                                                                                    }
+                                                                                                     },
+                                                                                      "additionalProperties":  true
+                                                                                  }
+                                                                    },
+                                                       "action_queue":  {
+                                                                            "type":  "array",
+                                                                            "items":  {
+                                                                                          "type":  "object",
+                                                                                          "required":  [
+                                                                                                           "done",
+                                                                                                           "text"
+                                                                                                       ],
+                                                                                          "properties":  {
+                                                                                                             "done":  {
+                                                                                                                          "type":  "boolean"
+                                                                                                                      },
+                                                                                                             "text":  {
+                                                                                                                          "type":  "string"
+                                                                                                                      }
+                                                                                                         },
+                                                                                          "additionalProperties":  true
+                                                                                      }
+                                                                        },
+                                                       "freshness_timeline":  {
+                                                                                  "type":  "array",
+                                                                                  "items":  {
+                                                                                                "type":  "object",
+                                                                                                "additionalProperties":  true
+                                                                                            }
+                                                                              },
+                                                       "market_session":  {
+                                                                              "type":  "object",
+                                                                              "additionalProperties":  true
+                                                                          },
+                                                       "auto_fetch_status":  {
+                                                                                 "type":  "object",
+                                                                                 "additionalProperties":  true
+                                                                             }
+                                                   },
+                                    "additionalProperties":  true
+                                }
+                   },
+    "additionalProperties":  false
+}

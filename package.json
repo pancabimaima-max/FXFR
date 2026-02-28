@@ -1,0 +1,19 @@
+{
+  "name": "fx-fundamentals-refresher-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "doctor": "powershell -ExecutionPolicy Bypass -File scripts\\desktop\\doctor.ps1",
+    "dev:fullstack": "powershell -ExecutionPolicy Bypass -File scripts\\desktop\\dev_fullstack.ps1",
+    "dev:desktop": "pnpm --filter @fxfr/desktop dev",
+    "build:desktop": "pnpm --filter @fxfr/desktop build",
+    "build:engine-sidecar": "powershell -ExecutionPolicy Bypass -File scripts\\desktop\\build_engine_sidecar.ps1",
+    "verify:package": "powershell -ExecutionPolicy Bypass -File scripts\\desktop\\verify_package_artifacts.ps1",
+    "soak:startup": "powershell -ExecutionPolicy Bypass -File scripts\\desktop\\soak_startup_cycles.ps1",
+    "soak:24h": "powershell -ExecutionPolicy Bypass -File scripts\\desktop\\soak_24h.ps1",
+    "gate:release": "powershell -ExecutionPolicy Bypass -File scripts\\desktop\\release_gate.ps1",
+    "lint:desktop": "pnpm --filter @fxfr/desktop lint",
+    "typecheck:desktop": "pnpm --filter @fxfr/desktop typecheck"
+  }
+}

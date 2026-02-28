@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fx-fundamentals-refresher.local/schemas/health.response.schema.json",
+  "title": "HealthResponse",
+  "type": "object",
+  "required": [
+    "meta",
+    "data"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "common.schema.json#/definitions/ResponseMeta"
+    },
+    "error": {
+      "$ref": "common.schema.json#/definitions/ErrorObject"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "status",
+        "service",
+        "macro_enabled",
+        "worker_pool_size"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok"
+          ]
+        },
+        "service": {
+          "type": "string"
+        },
+        "macro_enabled": {
+          "type": "boolean"
+        },
+        "worker_pool_size": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

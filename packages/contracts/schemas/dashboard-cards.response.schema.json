@@ -1,0 +1,140 @@
+{
+    "$schema":  "https://json-schema.org/draft/2020-12/schema",
+    "$id":  "https://fx-fundamentals-refresher.local/schemas/dashboard-cards.response.schema.json",
+    "title":  "DashboardCardsResponse",
+    "type":  "object",
+    "required":  [
+                     "meta",
+                     "data"
+                 ],
+    "properties":  {
+                       "meta":  {
+                                    "$ref":  "common.schema.json#/definitions/ResponseMeta"
+                                },
+                       "error":  {
+                                     "oneOf":  [
+                                                   {
+                                                       "$ref":  "common.schema.json#/definitions/ErrorObject"
+                                                   },
+                                                   {
+                                                       "type":  "null"
+                                                   }
+                                               ]
+                                 },
+                       "data":  {
+                                    "type":  "object",
+                                    "required":  [
+                                                     "cards"
+                                                 ],
+                                    "properties":  {
+                                                       "cards":  {
+                                                                     "type":  "array",
+                                                                     "items":  {
+                                                                                   "type":  "object",
+                                                                                   "required":  [
+                                                                                                    "symbol",
+                                                                                                    "readiness",
+                                                                                                    "metrics"
+                                                                                                ],
+                                                                                   "properties":  {
+                                                                                                      "symbol":  {
+                                                                                                                     "type":  "string"
+                                                                                                                 },
+                                                                                                      "readiness":  {
+                                                                                                                        "type":  "string",
+                                                                                                                        "enum":  [
+                                                                                                                                     "ready",
+                                                                                                                                     "warn",
+                                                                                                                                     "error"
+                                                                                                                                 ]
+                                                                                                                    },
+                                                                                                      "readiness_reason":  {
+                                                                                                                               "type":  "string"
+                                                                                                                           },
+                                                                                                      "rate_reason":  {
+                                                                                                                          "type":  "string"
+                                                                                                                      },
+                                                                                                      "inflation_reason":  {
+                                                                                                                               "type":  "string"
+                                                                                                                           },
+                                                                                                      "metrics":  {
+                                                                                                                      "type":  "object",
+                                                                                                                      "required":  [
+                                                                                                                                       "rate_differential",
+                                                                                                                                       "rate_trend",
+                                                                                                                                       "inflation_differential",
+                                                                                                                                       "carry_estimator",
+                                                                                                                                       "daily_atr_pct_average",
+                                                                                                                                       "strength_meter",
+                                                                                                                                       "atr14_h1_raw",
+                                                                                                                                       "atr14_h1_pips",
+                                                                                                                                       "swap_drag_bps"
+                                                                                                                                   ],
+                                                                                                                      "properties":  {
+                                                                                                                                         "rate_differential":  {
+                                                                                                                                                                   "type":  [
+                                                                                                                                                                                "number",
+                                                                                                                                                                                "null"
+                                                                                                                                                                            ]
+                                                                                                                                                               },
+                                                                                                                                         "rate_trend":  {
+                                                                                                                                                            "type":  "string"
+                                                                                                                                                        },
+                                                                                                                                         "inflation_differential":  {
+                                                                                                                                                                        "type":  [
+                                                                                                                                                                                     "number",
+                                                                                                                                                                                     "null"
+                                                                                                                                                                                 ]
+                                                                                                                                                                    },
+                                                                                                                                         "carry_estimator":  {
+                                                                                                                                                                 "type":  [
+                                                                                                                                                                              "number",
+                                                                                                                                                                              "null"
+                                                                                                                                                                          ]
+                                                                                                                                                             },
+                                                                                                                                         "daily_atr_pct_average":  {
+                                                                                                                                                                       "type":  [
+                                                                                                                                                                                    "number",
+                                                                                                                                                                                    "null"
+                                                                                                                                                                                ]
+                                                                                                                                                                   },
+                                                                                                                                         "strength_meter":  {
+                                                                                                                                                                "type":  [
+                                                                                                                                                                             "number",
+                                                                                                                                                                             "null"
+                                                                                                                                                                         ]
+                                                                                                                                                            },
+                                                                                                                                         "atr14_h1_raw":  {
+                                                                                                                                                              "type":  [
+                                                                                                                                                                           "number",
+                                                                                                                                                                           "null"
+                                                                                                                                                                       ]
+                                                                                                                                                          },
+                                                                                                                                         "atr14_h1_pips":  {
+                                                                                                                                                               "type":  [
+                                                                                                                                                                            "number",
+                                                                                                                                                                            "null"
+                                                                                                                                                                        ]
+                                                                                                                                                           },
+                                                                                                                                         "swap_drag_bps":  {
+                                                                                                                                                               "type":  "number"
+                                                                                                                                                           }
+                                                                                                                                     },
+                                                                                                                      "additionalProperties":  true
+                                                                                                                  }
+                                                                                                  },
+                                                                                   "additionalProperties":  true
+                                                                               }
+                                                                 },
+                                                       "total_symbols":  {
+                                                                             "type":  "integer"
+                                                                         },
+                                                       "filtered_symbols":  {
+                                                                                "type":  "integer"
+                                                                            }
+                                                   },
+                                    "additionalProperties":  true
+                                }
+                   },
+    "additionalProperties":  false
+}

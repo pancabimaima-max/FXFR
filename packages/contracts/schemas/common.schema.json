@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fx-fundamentals-refresher.local/schemas/common.schema.json",
+  "title": "Common Contracts",
+  "type": "object",
+  "definitions": {
+    "ErrorObject": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "recoverable",
+        "context"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "recoverable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResponseMeta": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "timestamp_utc",
+        "trace_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "timestamp_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "trace_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
