@@ -85,6 +85,15 @@ function resolveTimezoneOptions(): string[] {
   return fallbackTimezoneOptions;
 }
 
+function resolveSystemTimezone(): string {
+  try {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof detected === "string" && detected.trim().length > 0 ? detected : "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 function timezoneUtcPrefix(timeZone: string): string {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -125,7 +134,7 @@ function statusLabel(status: JobStatus): string {
 }
 
 function formatDateTime(value: string): string {
-  if (!value) return "n/a";
+  if (!value) return "";
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return value;
   return dt.toLocaleString([], { hour12: false });
@@ -142,7 +151,7 @@ const policyOfficialNotes: Record<string, string> = {
 
 function toDisplayNumber(value: unknown, digits = 2): string {
   const asNum = Number(value);
-  if (!Number.isFinite(asNum)) return "n/a";
+  if (!Number.isFinite(asNum)) return "";
   return asNum.toFixed(digits);
 }
 
@@ -203,7 +212,7 @@ function statusToneClass(status: string): string {
 }
 
 function formatPercent(value: number | null): string {
-  if (value === null) return "n/a";
+  if (value === null) return "";
   return `${value.toFixed(1)}%`;
 }
 
@@ -261,8 +270,29 @@ function getRowValue(row: Record<string, unknown>, keys: string[]): unknown {
 }
 
 function asDisplayText(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "n/a";
+  if (value === null || value === undefined || value === "") return "";
   return String(value);
+}
+
+function formatAuxValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => formatAuxValue(entry))
+      .filter((entry) => entry.length > 0)
+      .join(", ");
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .map(([key, entry]) => [key, formatAuxValue(entry)] as const)
+      .filter(([, entry]) => entry.length > 0);
+    if (entries.length === 0) return "";
+    return entries.map(([key, entry]) => `${key}=${entry}`).join(" | ");
+  }
+  return "";
 }
 
 export function DataChecklistPage({ sessionToken }: Props) {
@@ -320,7 +350,14 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const setBootstrap = useAppStore((s) => s.setBootstrap);
   const activePair = useAppStore((s) => s.activePair);
 
-  const timezoneOptions = useMemo(() => resolveTimezoneOptions(), []);
+  const systemLocalTimezone = useMemo(() => resolveSystemTimezone(), []);
+  const timezoneOptions = useMemo(() => {
+    const options = resolveTimezoneOptions();
+    if (!options.includes(systemLocalTimezone)) {
+      return [systemLocalTimezone, ...options];
+    }
+    return options;
+  }, [systemLocalTimezone]);
   const timezoneOptionItems = useMemo(
     () => timezoneOptions.map((tz) => ({ value: tz, label: `${timezoneUtcPrefix(tz)} ${tz}` })),
     [timezoneOptions],
@@ -404,7 +441,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
     setOverview(checklistRes.data);
     setRuntimeConfig(runtimeRes.data);
-    setDisplayTz(String(runtimeRes.data.timezone_display ?? "Asia/Jakarta"));
+    setDisplayTz(systemLocalTimezone);
     setServerTz(String(runtimeRes.data.timezone_server ?? "Asia/Gaza"));
   }
 
@@ -526,7 +563,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, reloadSeed, activePair]);
+  }, [sessionToken, reloadSeed, activePair, systemLocalTimezone]);
 
   useEffect(() => {
     if (loading || error || activeTab !== "Economic Calendar Data") {
@@ -877,10 +914,10 @@ export function DataChecklistPage({ sessionToken }: Props) {
         const impact = String(getRowValue(row, ["IMPACT", "impact", "PRIORITY", "priority"]) ?? "").trim();
         return {
           row,
-          currency: currency || "n/a",
-          country: currencyToCountryLabel[currency] ?? (currency || "n/a"),
-          category: category || "n/a",
-          impact: impact || "n/a",
+          currency: currency || "",
+          country: currencyToCountryLabel[currency] ?? (currency || ""),
+          category: category || "",
+          impact: impact || "",
           event: asDisplayText(getRowValue(row, ["EVENT", "event"])),
           period: asDisplayText(getRowValue(row, ["PERIOD", "period"])),
           actual: asDisplayText(getRowValue(row, ["ACTUAL", "actual"])),
@@ -976,13 +1013,14 @@ export function DataChecklistPage({ sessionToken }: Props) {
             <div className="form-grid">
               <div className="form-field">
                 <label>Local Time</label>
-                <select className="control-field" value={displayTz} onChange={(e) => setDisplayTz(e.target.value)}>
+                <select className="control-field" value={displayTz} disabled>
                   {timezoneOptionItems.map((tz) => (
                     <option key={tz.value} value={tz.value}>
                       {tz.label}
                     </option>
                   ))}
                 </select>
+                <p className="muted">Uses your system local clock from this device.</p>
               </div>
               <div className="form-field">
                 <label>Server Time</label>
@@ -993,6 +1031,10 @@ export function DataChecklistPage({ sessionToken }: Props) {
                     </option>
                   ))}
                 </select>
+                <p className="muted">
+                  Set this to the source timezone in your CSV. Example: if local time is 11:00 and MT5 CSV time is 06:00,
+                  choose the MT5 server timezone so rows convert to correct UTC.
+                </p>
               </div>
             </div>
             <div className="row surface-toolbar">
@@ -1288,8 +1330,8 @@ export function DataChecklistPage({ sessionToken }: Props) {
                         const hasManualOverride = Number.isFinite(overrideValue);
                         return (
                           <tr key={`${row.currency}-${row.seriesId}-${row.refreshedAtUtc}`} className="align-top">
-                            <td className="px-3 py-2 font-semibold text-zinc-100">{row.currency || "n/a"}</td>
-                            <td className="px-3 py-2 font-mono text-zinc-300">{row.seriesId || "n/a"}</td>
+                            <td className="px-3 py-2 font-semibold text-zinc-100">{row.currency || ""}</td>
+                            <td className="px-3 py-2 font-mono text-zinc-300">{row.seriesId || ""}</td>
                             <td className="px-3 py-2">
                               {hasManualOverride ? (
                                 <span className="font-bold text-emerald-400">
@@ -1321,12 +1363,12 @@ export function DataChecklistPage({ sessionToken }: Props) {
                                 )}
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-zinc-300">{String(row.aux ?? "")}</td>
-                            <td className="px-3 py-2 text-zinc-300">{row.asOfUtc || "n/a"}</td>
-                            <td className={`px-3 py-2 font-semibold ${statusToneClass(row.status)}`}>{row.status || "n/a"}</td>
+                            <td className="px-3 py-2 text-zinc-300">{formatAuxValue(row.aux)}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.asOfUtc || ""}</td>
+                            <td className={`px-3 py-2 font-semibold ${statusToneClass(row.status)}`}>{row.status || ""}</td>
                             <td className="max-w-[220px] px-3 py-2 text-red-300">{row.errorMessage || "—"}</td>
-                            <td className="max-w-[280px] px-3 py-2 text-zinc-300">{policyOfficialNotes[row.currency] ?? "n/a"}</td>
-                            <td className="px-3 py-2 text-zinc-300">{row.refreshedAtUtc || "n/a"}</td>
+                            <td className="max-w-[280px] px-3 py-2 text-zinc-300">{policyOfficialNotes[row.currency] ?? ""}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.refreshedAtUtc || ""}</td>
                           </tr>
                         );
                       })}
@@ -1367,16 +1409,16 @@ export function DataChecklistPage({ sessionToken }: Props) {
                             : "text-zinc-200";
                         return (
                           <tr key={`${row.currency}-${row.seriesId}-${row.refreshedAtUtc}`} className="align-top">
-                            <td className="px-3 py-2 font-semibold text-zinc-100">{row.currency || "n/a"}</td>
-                            <td className="px-3 py-2 font-mono text-zinc-300">{row.seriesId || "n/a"}</td>
+                            <td className="px-3 py-2 font-semibold text-zinc-100">{row.currency || ""}</td>
+                            <td className="px-3 py-2 font-mono text-zinc-300">{row.seriesId || ""}</td>
                             <td className="px-3 py-2">{toDisplayNumber(row.value, 2)}</td>
                             <td className={`px-3 py-2 font-semibold ${yoyClass}`}>{formatPercent(row.yoy)}</td>
                             <td className="px-3 py-2">{formatPercent(row.mom)}</td>
-                            <td className="px-3 py-2 text-zinc-300">{String(row.aux ?? "")}</td>
-                            <td className="px-3 py-2 text-zinc-300">{row.asOfUtc || "n/a"}</td>
-                            <td className={`px-3 py-2 font-semibold ${statusToneClass(row.status)}`}>{row.status || "n/a"}</td>
+                            <td className="px-3 py-2 text-zinc-300">{formatAuxValue(row.aux)}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.asOfUtc || ""}</td>
+                            <td className={`px-3 py-2 font-semibold ${statusToneClass(row.status)}`}>{row.status || ""}</td>
                             <td className="max-w-[220px] px-3 py-2 text-red-300">{row.errorMessage || "—"}</td>
-                            <td className="px-3 py-2 text-zinc-300">{row.refreshedAtUtc || "n/a"}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.refreshedAtUtc || ""}</td>
                           </tr>
                         );
                       })}
