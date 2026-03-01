@@ -1,69 +1,89 @@
-﻿# FX Fundamentals Refresher
+### 1) Toolchain (required)
 
-Primary control document: `docs/MASTER_CONTROL.md`
-
-Use `MASTER_CONTROL.md` as the single source of truth for:
-- mission and priorities
-- environment baseline
-- locked decisions
-- progress and next tranche
-- tab responsibilities
-- operator flow
-
-## Active Repo
-
-- Active: `C:\dev\fxfr_desktop`
-- Legacy archive: `C:\dev\fx_fundamentals_refresher_legacy_archive`
-
-## One-Command Dev (Recommended)
-
-```powershell
-pnpm doctor
-pnpm dev:fullstack
+```
+Node.js: 20.x (current on your machine: v20.20.0)
+pnpm: 9.12.3
+Python: 3.12.10
+Rust: stable (current on your machine: rustc 1.93.1, cargo 1.93.1)
 ```
 
-## Contract Snapshots
+### 2) Desktop app JS deps (`apps/desktop/package.json`)
 
-Engine contract snapshots are in `services/engine/tests/fixtures/snapshots` and are validated by tests.
-
-Refresh snapshots intentionally:
-
-```powershell
-$env:UPDATE_SNAPSHOTS='1'
-cd services\engine
-.\.venv\Scripts\python -m unittest tests.test_contract_snapshots -v
+```
+@fxfr/contracts: workspace:*
+react: ^18.3.1
+react-dom: ^18.3.1
+zustand: ^5.0.0
 ```
 
-Then rerun the same tests without `UPDATE_SNAPSHOTS`.
+### 3) Desktop app dev deps (exact currently required)
 
-## Packaging Lane Commands
-
-```powershell
-pnpm build:engine-sidecar
-pnpm --filter @fxfr/desktop tauri:build
-pnpm verify:package
+```
+@tauri-apps/cli: ^2.0.0
+@types/react: ^18.3.3
+@types/react-dom: ^18.3.0
+@typescript-eslint/eslint-plugin: ^8.12.2
+@typescript-eslint/parser: ^8.12.2
+@vitejs/plugin-react: ^4.3.1
+autoprefixer: 10.4.20
+eslint: ^9.14.0
+postcss: 8.4.49
+tailwindcss: 3.4.17
+typescript: ^5.6.3
+vite: ^5.4.10
 ```
 
-## Soak and Release Gate
+### 4) Tauri Rust crate versions (`apps/desktop/src-tauri/Cargo.toml`)
 
-1. Run startup-cycle soak (both packaged + dev by default):
-
-```powershell
-pnpm soak:startup
+```
+tauri: 2.0.2
+tauri-build: 2.0.1
+serde: 1
+serde_json: 1
+ureq: 2.10.1
 ```
 
-2. Run long-run soak helper (defaults to packaged mode):
+### 5) Python engine deps (`services/engine/requirements.txt`)
 
-```powershell
-pnpm soak:24h
+```
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic==2.11.9
+pydantic-settings==2.11.0
+python-multipart==0.0.20
+pandas==2.3.3
+pyarrow==19.0.1
+numpy==2.3.3
+pytz==2025.2
+fredapi==0.5.2
+httpx==0.28.1
+jsonschema==4.23.0
 ```
 
-3. Fill attestation template at `docs/templates/release-attestation.template.json` (copy it and set required booleans/approvals).
+---
 
-4. Generate release gate report:
+## Copy-paste: verify/install everything
+
+Run from repo root `C:\\dev\\fxfr_desktop`:
 
 ```powershell
-pnpm gate:release
-```
+# Verify toolchain
+node -v
+pnpm -v
+python --version
+rustc --version
+cargo --version
 
-5. Attach generated artifacts under `artifacts/` to the release decision.
+# Install JS workspace deps exactly from lockfile
+pnpm install --frozen-lockfile
+
+# Setup Python engine venv + deps
+python -m venv services\\engine\\.venv
+services\\engine\\.venv\\Scripts\\python -m pip install --upgrade pip
+services\\engine\\.venv\\Scripts\\python -m pip install -r services\\engine\\requirements.txt
+
+# Validate desktop health
+pnpm --filter @fxfr/desktop typecheck
+pnpm --filter @fxfr/desktop lint
+pnpm --filter @fxfr/desktop build
+```
