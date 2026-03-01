@@ -422,6 +422,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const [fredPolicyRows, setFredPolicyRows] = useState<Record<string, unknown>[]>([]);
   const [fredInflRows, setFredInflRows] = useState<Record<string, unknown>[]>([]);
   const [policyManualOverrides, setPolicyManualOverrides] = useState<Record<string, number>>({});
+  const [inflationManualOverrides, setInflationManualOverrides] = useState<Record<string, number>>({});
   const [fredExpandedCards, setFredExpandedCards] = useState<Record<string, boolean>>({});
   const [fredAccordions, setFredAccordions] = useState<Record<string, Record<string, boolean>>>({});
   const [busyAction, setBusyAction] = useState("");
@@ -1100,6 +1101,34 @@ export function DataChecklistPage({ sessionToken }: Props) {
     });
   }
 
+  function updateInflationOverride(currency: string, rawInput: string) {
+    const token = currency.trim().toUpperCase();
+    if (!token) return;
+    const next = rawInput.trim();
+    setInflationManualOverrides((prev) => {
+      if (!next) {
+        const cloned = { ...prev };
+        delete cloned[token];
+        return cloned;
+      }
+      const parsed = Number(next);
+      if (!Number.isFinite(parsed)) {
+        return prev;
+      }
+      return { ...prev, [token]: parsed };
+    });
+  }
+
+  function clearInflationOverride(currency: string) {
+    const token = currency.trim().toUpperCase();
+    setInflationManualOverrides((prev) => {
+      if (!(token in prev)) return prev;
+      const cloned = { ...prev };
+      delete cloned[token];
+      return cloned;
+    });
+  }
+
   function toggleFredDetails(cardKey: string) {
     setFredExpandedCards((prev) => ({ ...prev, [cardKey]: !prev[cardKey] }));
   }
@@ -1494,7 +1523,11 @@ export function DataChecklistPage({ sessionToken }: Props) {
                     : policyDelta < 0
                       ? "text-red-600"
                       : "text-slate-500";
-                  const inflationDelta = inflationRow?.yoy ?? inflationRow?.mom ?? null;
+                  const baseInflationRate = inflationRow?.yoy ?? null;
+                  const inflationOverrideValue = inflationManualOverrides[card.currency];
+                  const hasInflationOverride = Number.isFinite(inflationOverrideValue);
+                  const inflationDisplayValue = hasInflationOverride ? inflationOverrideValue : baseInflationRate;
+                  const inflationDelta = inflationRow?.mom ?? inflationRow?.yoy ?? null;
                   const inflationDeltaClass = inflationDelta !== null && inflationDelta > 0
                     ? "text-emerald-600"
                     : inflationDelta !== null && inflationDelta < 0
@@ -1549,7 +1582,9 @@ export function DataChecklistPage({ sessionToken }: Props) {
                           <div className="rounded-lg bg-purple-50 p-4">
                             <p className="mb-1 text-xs text-slate-600">Inflation Rate</p>
                             <div className="flex items-center gap-2">
-                              <span className="text-2xl font-bold text-purple-700">{toDisplayNumber(inflationRow?.value, 2) || "—"}%</span>
+                              <span className="text-2xl font-bold text-purple-700">
+                                {inflationDisplayValue !== null ? formatPercent(inflationDisplayValue) : "—"}
+                              </span>
                               <span className={`text-sm font-semibold ${inflationDeltaClass}`}>
                                 {inflationDelta !== null ? `${inflationDelta > 0 ? "+" : ""}${inflationDelta.toFixed(1)}%` : "0%"}
                               </span>
@@ -1677,7 +1712,10 @@ export function DataChecklistPage({ sessionToken }: Props) {
                                 <div className="px-5 pb-4 pt-0.5">
                                   {detailRow("Series ID", inflationRow?.seriesId || "—", { mono: true })}
                                   {detailRow("As Of", formatDateCompact(inflationRow?.asOfUtc))}
-                                  {detailRow("YoY", formatPercent(inflationRow?.yoy ?? null) || "—")}
+                                  {detailRow(
+                                    "YoY",
+                                    formatPercent(hasInflationOverride ? inflationOverrideValue : (inflationRow?.yoy ?? null)) || "—",
+                                  )}
                                   {detailRow("MoM", formatPercent(inflationRow?.mom ?? null) || "—")}
                                   {inflationRow?.errorMessage ? detailRow("Error", inflationRow.errorMessage, { red: true }) : null}
                                   {detailRow("Refreshed", formatDateCompact(inflationRow?.refreshedAtUtc))}
@@ -1686,10 +1724,10 @@ export function DataChecklistPage({ sessionToken }: Props) {
                               )}
                             </div>
 
-                            {/* Manual override — always visible */}
+                            {/* Manual override (Policy) — always visible */}
                             {policyRow && (
                               <div className="px-5 py-3">
-                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Manual Override</p>
+                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Manual Override (Policy)</p>
                                 <div className="inline-flex items-center gap-2">
                                   <input
                                     type="number"
@@ -1704,12 +1742,42 @@ export function DataChecklistPage({ sessionToken }: Props) {
                                       type="button"
                                       className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-red-300 hover:text-red-700"
                                       onClick={() => clearPolicyOverride(card.currency)}
-                                      aria-label={`Clear override for ${card.currency}`}
+                                      aria-label={`Clear policy override for ${card.currency}`}
                                     >
                                       Clear
                                     </button>
                                   )}
                                   {!hasManualOverride && (
+                                    <span className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500">Not set</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Manual override (Inflation) — always visible */}
+                            {inflationRow && (
+                              <div className="border-t border-slate-200 px-5 py-3">
+                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Manual Override (Inflation)</p>
+                                <div className="inline-flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="—"
+                                    className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none transition focus:border-blue-500"
+                                    value={hasInflationOverride ? String(inflationOverrideValue) : ""}
+                                    onChange={(e) => updateInflationOverride(card.currency, e.target.value)}
+                                  />
+                                  {hasInflationOverride && (
+                                    <button
+                                      type="button"
+                                      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-red-300 hover:text-red-700"
+                                      onClick={() => clearInflationOverride(card.currency)}
+                                      aria-label={`Clear inflation override for ${card.currency}`}
+                                    >
+                                      Clear
+                                    </button>
+                                  )}
+                                  {!hasInflationOverride && (
                                     <span className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500">Not set</span>
                                   )}
                                 </div>
