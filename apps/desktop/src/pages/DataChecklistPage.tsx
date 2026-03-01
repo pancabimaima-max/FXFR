@@ -214,9 +214,10 @@ function formatPercent(value: number | null): string {
   return `${value.toFixed(1)}%`;
 }
 
-type CalendarDatePreset = "yesterday" | "today" | "tomorrow" | "this_week" | "next_week" | "custom";
+type CalendarDatePreset = "all_dates" | "yesterday" | "today" | "tomorrow" | "this_week" | "next_week" | "custom";
 
 const calendarDatePresetItems: Array<{ value: CalendarDatePreset; label: string }> = [
+  { value: "all_dates", label: "All Dates" },
   { value: "yesterday", label: "Yesterday" },
   { value: "today", label: "Today" },
   { value: "tomorrow", label: "Tomorrow" },
@@ -302,7 +303,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
     categories: [],
     impacts: [],
   });
-  const [calendarPreset, setCalendarPreset] = useState<CalendarDatePreset>("today");
+  const [calendarPreset, setCalendarPreset] = useState<CalendarDatePreset>("all_dates");
   const [calendarCustomFrom, setCalendarCustomFrom] = useState("");
   const [calendarCustomTo, setCalendarCustomTo] = useState("");
   const [calendarCountry, setCalendarCountry] = useState("ALL");
@@ -765,6 +766,12 @@ export function DataChecklistPage({ sessionToken }: Props) {
         throw new Error("Calendar upload job did not return a job id.");
       }
       setCalendarFile(null);
+      setCalendarPreset("all_dates");
+      setCalendarCustomFrom("");
+      setCalendarCustomTo("");
+      setCalendarCountry("ALL");
+      setCalendarCategory("ALL");
+      setCalendarImpact("ALL");
       beginTrackedJob(jobId, "ingest.calendar", "Queued for upload");
       setSuccessText("Economic Calendar Data job started.");
     } catch (err) {

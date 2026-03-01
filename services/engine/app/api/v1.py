@@ -185,6 +185,8 @@ def _apply_calendar_date_preset(
         return df
 
     token = str(date_preset or "").strip().lower()
+    if token == "all_dates":
+        return df
     if token not in {"yesterday", "today", "tomorrow", "this_week", "next_week", "custom"}:
         return df
 
@@ -1084,7 +1086,8 @@ def get_calendar_preview(
     }
 
     out = df.copy()
-    tz_name = str(services["state"].display_timezone or DISPLAY_TZ_DEFAULT)
+    runtime = services["state"].load_runtime_state()
+    tz_name = str(runtime.display_timezone or DISPLAY_TZ_DEFAULT)
     out = _apply_calendar_date_preset(
         out,
         event_ts_col=event_ts_col,

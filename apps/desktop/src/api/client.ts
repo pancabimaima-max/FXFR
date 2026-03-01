@@ -200,7 +200,7 @@ export async function fetchPricePreview(sessionToken: string, limit = 50, symbol
 export type CalendarPreviewParams = {
   sort_by?: "event_time_utc" | "server_datetime";
   sort_dir?: "asc" | "desc";
-  date_preset?: "yesterday" | "today" | "tomorrow" | "this_week" | "next_week" | "custom";
+  date_preset?: "all_dates" | "yesterday" | "today" | "tomorrow" | "this_week" | "next_week" | "custom";
   date_from?: string;
   date_to?: string;
   local_anchor?: string;
