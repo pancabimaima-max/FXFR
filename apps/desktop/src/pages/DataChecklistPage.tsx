@@ -204,13 +204,6 @@ function normalizeFredRow(row: Record<string, unknown>) {
   };
 }
 
-function statusToneClass(status: string): string {
-  const token = status.trim().toLowerCase();
-  if (token === "ok") return "text-emerald-400";
-  if (token === "error") return "text-red-400";
-  return "text-amber-300";
-}
-
 function formatPercent(value: number | null): string {
   if (value === null) return "";
   return `${value.toFixed(1)}%`;
@@ -311,6 +304,11 @@ function toGaugePercent(value: number, min: number, max: number): number {
   return Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 0));
 }
 
+function toGaugeArcDegrees(percent: number, minDeg = 5, maxDeg = 15): number {
+  const normalized = Math.max(0, Math.min(100, percent));
+  return minDeg + ((maxDeg - minDeg) * normalized) / 100;
+}
+
 function toIsoMillis(value: string): number | null {
   if (!value) return null;
   const parsed = Date.parse(value);
@@ -358,10 +356,27 @@ function buildPolicySparkline(value: number, aux: unknown): number[] {
   return [value - 0.03, value + 0.02, value - 0.02, value + 0.01, value, value + 0.01];
 }
 
+function sparklineStrokeByTrend(trendToken: string): string {
+  if (trendToken === "falling") return "#ef4444";
+  return "#22c55e";
+}
+
+function sparklineStrokeByMomentum(value: number | null): string {
+  if (value !== null && value < 0) return "#ef4444";
+  return "#22c55e";
+}
+
 function fredDeltaPillClass(value: number | null): string {
   if (value !== null && value > 2) return "border-emerald-400/50 bg-emerald-500/10 text-emerald-300";
   if (value !== null && value < 1) return "border-red-400/50 bg-red-500/10 text-red-300";
   return "border-zinc-700/80 bg-zinc-900/80 text-zinc-200";
+}
+
+function fredStatusBadgeClass(status: string): string {
+  const token = status.trim().toLowerCase();
+  if (token === "ok") return "border-[#e30613]/70 bg-[#e30613]/15 text-[#ff7d85]";
+  if (token === "error") return "border-zinc-600/70 bg-zinc-900 text-zinc-200";
+  return "border-zinc-700/80 bg-zinc-900 text-zinc-300";
 }
 
 function resolveMarketSessionLabel(date: Date): string {
@@ -1412,8 +1427,8 @@ export function DataChecklistPage({ sessionToken }: Props) {
         <>
           {/* AMD-style FRED command center header and controls */}
           <section
-            className={`rounded-xl border border-red-500/25 bg-[#0a0a0a] p-5 [font-family:Inter,system-ui,sans-serif] shadow-[inset_0_0_0_1px_rgba(227,6,19,0.15)] ${
-              fredDataFresh ? "shadow-[0_0_30px_rgba(227,6,19,0.22),inset_0_0_0_1px_rgba(227,6,19,0.2)]" : ""
+            className={`rounded-xl border border-zinc-800 bg-[#0a0a0a] p-6 [font-family:Inter,system-ui,sans-serif] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] ${
+              fredDataFresh ? "shadow-[0_0_18px_rgba(227,6,19,0.14),inset_0_1px_0_rgba(255,255,255,0.04)]" : ""
             }`}
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1422,9 +1437,9 @@ export function DataChecklistPage({ sessionToken }: Props) {
                 <p className="mt-1 text-sm text-zinc-400">Policy and Inflation source tables with per-series status/error rows.</p>
               </div>
               <div className="flex flex-wrap justify-end gap-2 text-xs">
-                <span className="rounded-full border border-red-400/40 bg-zinc-900/90 px-3 py-1 text-zinc-200">Local Clock: {localClockText}</span>
-                <span className="rounded-full border border-red-400/40 bg-zinc-900/90 px-3 py-1 text-zinc-200">Market Session: {marketSessionText}</span>
-                <span className="rounded-full border border-red-400/40 bg-zinc-900/90 px-3 py-1 text-zinc-200">
+                <span className="rounded-full border border-zinc-700 bg-zinc-900/90 px-3 py-1 text-zinc-300">Local Clock: {localClockText}</span>
+                <span className="rounded-full border border-zinc-700 bg-zinc-900/90 px-3 py-1 text-zinc-300">Market Session: {marketSessionText}</span>
+                <span className="rounded-full border border-zinc-700 bg-zinc-900/90 px-3 py-1 text-zinc-300">
                   Last Refresh: {latestFredRefreshMs ? new Date(latestFredRefreshMs).toLocaleString([], { hour12: false }) : "n/a"}
                 </span>
               </div>
@@ -1433,7 +1448,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
               <label className="space-y-2">
                 <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400">FRED API Key (optional overwrite)</span>
                 <input
-                  className="w-full rounded-lg border border-red-500/30 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-red-400 focus:shadow-[0_0_0_1px_rgba(227,6,19,0.25)]"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-[#e30613] focus:shadow-[0_0_0_1px_rgba(227,6,19,0.25)]"
                   id="fred-key-inline"
                   type="password"
                   value={fredApiKey}
@@ -1457,10 +1472,10 @@ export function DataChecklistPage({ sessionToken }: Props) {
           {/* AMD-style dual-column metrics layout (Policy | Inflation) */}
           <section className="mt-4 grid gap-4 xl:grid-cols-2">
             {/* Policy cards with manual override controls */}
-            <div className="rounded-xl border border-red-500/25 bg-[#0a0a0a] p-4 shadow-[inset_0_0_0_1px_rgba(227,6,19,0.15)]">
+            <div className="rounded-xl border border-zinc-800 bg-[#0a0a0a] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-zinc-200">Policy</h3>
               {normalizedPolicyRows.length === 0 ? (
-                <div className="rounded-lg border border-red-500/30 bg-zinc-950/70 px-3 py-4 text-sm text-zinc-400">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-4 text-sm text-zinc-400">
                   No policy snapshot rows.
                 </div>
               ) : (
@@ -1473,20 +1488,21 @@ export function DataChecklistPage({ sessionToken }: Props) {
                     const cardKey = `policy-${row.currency}-${row.seriesId}`;
                     const cardExpanded = Boolean(fredExpandedCards[cardKey]);
                     const auxObj = (row.aux ?? {}) as Record<string, unknown>;
+                    const trendToken = String(auxObj.trend ?? "").trim().toLowerCase();
                     const sparklineValues = buildPolicySparkline(valueNumber, row.aux);
-                    const sparkline = sparklinePath(sparklineValues);
                     const gaugePct = toGaugePercent(valueNumber, -1, 10);
+                    const gaugeArc = toGaugeArcDegrees(gaugePct);
                     const gaugeStyle: CSSProperties = {
-                      background: `conic-gradient(#e30613 ${gaugePct}%, rgba(255,255,255,0.08) ${gaugePct}% 100%)`,
+                      background: `conic-gradient(#e30613 0deg ${gaugeArc}deg, rgba(255,255,255,0.18) ${gaugeArc}deg 360deg)`,
                     };
                     return (
                       <article
                         key={`${row.currency}-${row.seriesId}-${row.refreshedAtUtc}`}
-                        className="rounded-xl border border-red-500/25 bg-[#111111] p-4 shadow-[inset_0_0_0_1px_rgba(227,6,19,0.15)]"
+                        className="rounded-xl border border-zinc-800 bg-[#101010] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/35 bg-zinc-900 text-lg">
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-lg">
                               {currencyToEmoji[row.currency] ?? "🏳️"}
                             </span>
                             <div>
@@ -1494,25 +1510,25 @@ export function DataChecklistPage({ sessionToken }: Props) {
                               <p className="font-mono text-[11px] text-zinc-400">{row.seriesId || ""}</p>
                             </div>
                           </div>
-                          <span className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusToneClass(row.status)} border-current/40 bg-zinc-900/70`}>
+                          <span className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${fredStatusBadgeClass(row.status)}`}>
                             {row.status || "n/a"}
                           </span>
                         </div>
-                        <div className="mt-4 grid grid-cols-[96px_1fr] items-center gap-4">
-                          <div className="relative h-24 w-24 rounded-full p-[6px]" style={gaugeStyle}>
+                        <div className="mt-5 grid grid-cols-[120px_1fr] items-center gap-4">
+                          <div className="relative h-28 w-28 rounded-full p-[3px] [transform:rotate(-90deg)]" style={gaugeStyle}>
                             <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#0f0f0f]">
-                              <span className="text-lg font-bold leading-none text-zinc-100">{displayValue || "—"}</span>
-                              <span className="mt-1 text-[10px] uppercase tracking-wide text-zinc-400">Value</span>
+                              <span className="text-4xl font-semibold leading-none text-zinc-100 [transform:rotate(90deg)]">{displayValue || "—"}</span>
+                              <span className="mt-1 text-[10px] uppercase tracking-[0.12em] text-zinc-500 [transform:rotate(90deg)]">Value</span>
                             </div>
                           </div>
-                          <div>
-                            <div className="mb-2 h-8 w-full rounded-md border border-zinc-800 bg-zinc-950/90 px-2 py-1">
-                              <svg viewBox="0 0 150 32" className="h-full w-full">
-                                <path d={sparkline} fill="none" stroke="#00d27a" strokeWidth="2" strokeLinecap="round" />
+                          <div className="min-w-0">
+                            <div className="mb-2 flex items-center justify-start">
+                              <svg viewBox="0 0 60 18" className="h-[18px] w-[60px]">
+                                <path d={sparklinePath(sparklineValues, 60, 18)} fill="none" stroke={sparklineStrokeByTrend(trendToken)} strokeWidth="1.5" strokeLinecap="round" />
                               </svg>
                             </div>
                             <div className="flex flex-wrap gap-2 text-xs">
-                              <span className="rounded-md border border-zinc-700/80 bg-zinc-900/90 px-2 py-1 font-semibold text-zinc-200">
+                              <span className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 font-medium text-zinc-300">
                                 Trend: {String(auxObj.trend ?? "n/a")}
                               </span>
                               {hasManualOverride && (
@@ -1528,7 +1544,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
                         <div className="mt-3">
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-300 hover:text-zinc-100"
+                            className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-400 hover:text-zinc-100"
                             onClick={() => toggleFredDetails(cardKey)}
                           >
                             <svg
@@ -1543,39 +1559,41 @@ export function DataChecklistPage({ sessionToken }: Props) {
                             Details
                           </button>
                           {cardExpanded && (
-                            <div className="mt-2 grid gap-1 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-300">
+                            <div className="mt-2 grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-300">
                               <p><span className="text-zinc-500">AS_OF_UTC:</span> {row.asOfUtc || "—"}</p>
                               <p><span className="text-zinc-500">ERROR_MESSAGE:</span> {row.errorMessage || "—"}</p>
                               <p><span className="text-zinc-500">CENTRAL_BANK:</span> {String(auxObj.central_bank ?? "—")}</p>
                               <p><span className="text-zinc-500">AUX:</span> {formatAuxValue(row.aux) || "—"}</p>
                               <p><span className="text-zinc-500">OFFICIAL_NOTE:</span> {policyOfficialNotes[row.currency] ?? "—"}</p>
                               <p><span className="text-zinc-500">REFRESHED_AT_UTC:</span> {row.refreshedAtUtc || "—"}</p>
+                              <div className="mt-1 border-t border-zinc-800 pt-2">
+                                <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">Manual Override</p>
+                                <div className="inline-flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="—"
+                                    className="w-28 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none transition focus:border-[#e30613]"
+                                    value={hasManualOverride ? String(overrideValue) : ""}
+                                    onChange={(e) => updatePolicyOverride(row.currency, e.target.value)}
+                                  />
+                                  {hasManualOverride && (
+                                    <button
+                                      type="button"
+                                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-[#e30613] hover:text-red-300"
+                                      onClick={() => clearPolicyOverride(row.currency)}
+                                      aria-label={`Clear override for ${row.currency}`}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           )}
-                        </div>
-
-                        <div className="mt-3 border-t border-zinc-800 pt-3">
-                          <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-400">Manual Override</p>
-                          <div className="inline-flex items-center gap-2">
-                            <input
-                              type="number"
-                              step="0.01"
-                              placeholder="—"
-                              className="w-28 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none transition focus:border-red-400"
-                              value={hasManualOverride ? String(overrideValue) : ""}
-                              onChange={(e) => updatePolicyOverride(row.currency, e.target.value)}
-                            />
-                            {hasManualOverride && (
-                              <button
-                                type="button"
-                                className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-red-400 hover:text-red-300"
-                                onClick={() => clearPolicyOverride(row.currency)}
-                                aria-label={`Clear override for ${row.currency}`}
-                              >
-                                ×
-                              </button>
-                            )}
-                          </div>
+                          {!cardExpanded && (
+                            <p className="mt-2 text-[11px] text-zinc-500">Expand details to edit manual override.</p>
+                          )}
                         </div>
                       </article>
                     );
@@ -1585,10 +1603,10 @@ export function DataChecklistPage({ sessionToken }: Props) {
             </div>
 
             {/* Inflation cards with computed YoY/MoM performance pills */}
-            <div className="rounded-xl border border-red-500/25 bg-[#0a0a0a] p-4 shadow-[inset_0_0_0_1px_rgba(227,6,19,0.15)]">
+            <div className="rounded-xl border border-zinc-800 bg-[#0a0a0a] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-zinc-200">Inflation</h3>
               {normalizedInflRows.length === 0 ? (
-                <div className="rounded-lg border border-red-500/30 bg-zinc-950/70 px-3 py-4 text-sm text-zinc-400">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-4 text-sm text-zinc-400">
                   No inflation snapshot rows.
                 </div>
               ) : (
@@ -1598,41 +1616,41 @@ export function DataChecklistPage({ sessionToken }: Props) {
                     const cardExpanded = Boolean(fredExpandedCards[cardKey]);
                     const indexValue = Number(row.value);
                     const gaugePct = toGaugePercent(indexValue, 80, 140);
+                    const gaugeArc = toGaugeArcDegrees(gaugePct);
                     const gaugeStyle: CSSProperties = {
-                      background: `conic-gradient(#e30613 ${gaugePct}%, rgba(255,255,255,0.08) ${gaugePct}% 100%)`,
+                      background: `conic-gradient(#e30613 0deg ${gaugeArc}deg, rgba(255,255,255,0.18) ${gaugeArc}deg 360deg)`,
                     };
                     const sparklineValues = buildInflationSparkline(row.aux, indexValue);
-                    const sparkline = sparklinePath(sparklineValues);
                     return (
                       <article
                         key={`${row.currency}-${row.seriesId}-${row.refreshedAtUtc}`}
-                        className="rounded-xl border border-red-500/25 bg-[#111111] p-4 shadow-[inset_0_0_0_1px_rgba(227,6,19,0.15)]"
+                        className="rounded-xl border border-zinc-800 bg-[#101010] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/35 bg-zinc-900 text-lg">
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-lg">
                               {currencyToEmoji[row.currency] ?? "🏳️"}
                             </span>
                             <div>
                               <p className="text-sm font-semibold text-zinc-100">{row.currency || "N/A"}</p>
-                              <p className="font-mono text-[11px] text-zinc-400">{row.seriesId || ""}</p>
+                              <p className="font-mono text-[11px] text-zinc-500">{row.seriesId || ""}</p>
                             </div>
                           </div>
-                          <span className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusToneClass(row.status)} border-current/40 bg-zinc-900/70`}>
+                          <span className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${fredStatusBadgeClass(row.status)}`}>
                             {row.status || "n/a"}
                           </span>
                         </div>
-                        <div className="mt-4 grid grid-cols-[96px_1fr] items-center gap-4">
-                          <div className="relative h-24 w-24 rounded-full p-[6px]" style={gaugeStyle}>
+                        <div className="mt-5 grid grid-cols-[120px_1fr] items-center gap-4">
+                          <div className="relative h-28 w-28 rounded-full p-[3px] [transform:rotate(-90deg)]" style={gaugeStyle}>
                             <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#0f0f0f]">
-                              <span className="text-lg font-bold leading-none text-zinc-100">{toDisplayNumber(row.value, 2) || "—"}</span>
-                              <span className="mt-1 text-[10px] uppercase tracking-wide text-zinc-400">Index</span>
+                              <span className="text-4xl font-semibold leading-none text-zinc-100 [transform:rotate(90deg)]">{toDisplayNumber(row.value, 2) || "—"}</span>
+                              <span className="mt-1 text-[10px] uppercase tracking-[0.12em] text-zinc-500 [transform:rotate(90deg)]">Index</span>
                             </div>
                           </div>
-                          <div>
-                            <div className="mb-2 h-8 w-full rounded-md border border-zinc-800 bg-zinc-950/90 px-2 py-1">
-                              <svg viewBox="0 0 150 32" className="h-full w-full">
-                                <path d={sparkline} fill="none" stroke="#00d27a" strokeWidth="2" strokeLinecap="round" />
+                          <div className="min-w-0">
+                            <div className="mb-2 flex items-center justify-start">
+                              <svg viewBox="0 0 60 18" className="h-[18px] w-[60px]">
+                                <path d={sparklinePath(sparklineValues, 60, 18)} fill="none" stroke={sparklineStrokeByMomentum(row.yoy)} strokeWidth="1.5" strokeLinecap="round" />
                               </svg>
                             </div>
                             <div className="flex flex-wrap gap-2 text-xs">
@@ -1646,7 +1664,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
                         <div className="mt-3">
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-300 hover:text-zinc-100"
+                            className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-400 hover:text-zinc-100"
                             onClick={() => toggleFredDetails(cardKey)}
                           >
                             <svg
