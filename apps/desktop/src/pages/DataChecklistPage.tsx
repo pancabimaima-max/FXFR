@@ -137,6 +137,82 @@ function formatDateTime(value: string): string {
   return dt.toLocaleString([], { hour12: false });
 }
 
+const policyOfficialNotes: Record<string, string> = {
+  AUD: "Official 3.85% (RBA target, 4 Feb 2026)",
+  CAD: "Official 2.25% (BoC target, 28 Jan 2026)",
+  EUR: "Official 2.00% deposit (ECB, 27 Feb 2026)",
+  GBP: "Official 3.75% (BoE, Feb 2026)",
+  JPY: "Official 0.75% (BOJ, Jan 2026)",
+  USD: "Official 3.50–3.75% (Fed, effective 3.64%)",
+};
+
+function toDisplayNumber(value: unknown, digits = 2): string {
+  const asNum = Number(value);
+  if (!Number.isFinite(asNum)) return "n/a";
+  return asNum.toFixed(digits);
+}
+
+function toObservationsArray(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (typeof entry === "number") return entry;
+      if (typeof entry === "string") return Number(entry);
+      if (entry && typeof entry === "object") {
+        const maybeObj = entry as Record<string, unknown>;
+        return Number(maybeObj.value ?? maybeObj.v ?? maybeObj.index ?? NaN);
+      }
+      return Number.NaN;
+    })
+    .filter((num) => Number.isFinite(num));
+}
+
+function computeInflationDeltasFromObservations(observations: number[]): { yoy: number | null; mom: number | null } {
+  if (observations.length < 13) {
+    return { yoy: null, mom: null };
+  }
+  const latest = observations[observations.length - 1];
+  const previousMonth = observations[observations.length - 2];
+  const previousYear = observations[observations.length - 13];
+  if (!Number.isFinite(latest) || !Number.isFinite(previousMonth) || !Number.isFinite(previousYear)) {
+    return { yoy: null, mom: null };
+  }
+  if (previousMonth === 0 || previousYear === 0) {
+    return { yoy: null, mom: null };
+  }
+  const yoy = ((latest / previousYear) - 1) * 100;
+  const mom = ((latest / previousMonth) - 1) * 100;
+  return {
+    yoy: Number.isFinite(yoy) ? Number(yoy.toFixed(1)) : null,
+    mom: Number.isFinite(mom) ? Number(mom.toFixed(1)) : null,
+  };
+}
+
+function normalizeFredRow(row: Record<string, unknown>) {
+  return {
+    currency: String(row.currency ?? "").trim().toUpperCase(),
+    seriesId: String(row.series_id ?? ""),
+    value: row.value,
+    aux: row.aux,
+    asOfUtc: String(row.as_of_utc ?? ""),
+    status: String(row.status ?? ""),
+    errorMessage: String(row.error_message ?? ""),
+    refreshedAtUtc: String(row.refreshed_at_utc ?? ""),
+  };
+}
+
+function statusToneClass(status: string): string {
+  const token = status.trim().toLowerCase();
+  if (token === "ok") return "text-emerald-400";
+  if (token === "error") return "text-red-400";
+  return "text-amber-300";
+}
+
+function formatPercent(value: number | null): string {
+  if (value === null) return "n/a";
+  return `${value.toFixed(1)}%`;
+}
+
 export function DataChecklistPage({ sessionToken }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [loading, setLoading] = useState(true);
@@ -160,6 +236,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const [calendarPreviewRows, setCalendarPreviewRows] = useState<Record<string, unknown>[]>([]);
   const [fredPolicyRows, setFredPolicyRows] = useState<Record<string, unknown>[]>([]);
   const [fredInflRows, setFredInflRows] = useState<Record<string, unknown>[]>([]);
+  const [policyManualOverrides, setPolicyManualOverrides] = useState<Record<string, number>>({});
   const [busyAction, setBusyAction] = useState("");
   const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
   const [error, setError] = useState("");
@@ -655,6 +732,51 @@ export function DataChecklistPage({ sessionToken }: Props) {
     : (overview?.overall_state ?? "n/a");
   const overallScoreRaw = Number(overview?.total_score);
   const overallScorePct = Number.isFinite(overallScoreRaw) ? Math.max(0, Math.min(100, Math.round(overallScoreRaw))) : 0;
+  const normalizedPolicyRows = useMemo(() => fredPolicyRows.map(normalizeFredRow), [fredPolicyRows]);
+  const normalizedInflRows = useMemo(
+    () =>
+      fredInflRows.map((row) => {
+        const normalized = normalizeFredRow(row);
+        const auxObj = (row.aux ?? {}) as Record<string, unknown>;
+        const observations = toObservationsArray(auxObj.observations);
+        const deltas = computeInflationDeltasFromObservations(observations);
+        return {
+          ...normalized,
+          seriesId: normalized.currency === "AUD" ? "AUSCPALTT01IXNBQ" : normalized.seriesId,
+          yoy: deltas.yoy,
+          mom: deltas.mom,
+        };
+      }),
+    [fredInflRows],
+  );
+
+  function updatePolicyOverride(currency: string, rawInput: string) {
+    const token = currency.trim().toUpperCase();
+    if (!token) return;
+    const next = rawInput.trim();
+    setPolicyManualOverrides((prev) => {
+      if (!next) {
+        const cloned = { ...prev };
+        delete cloned[token];
+        return cloned;
+      }
+      const parsed = Number(next);
+      if (!Number.isFinite(parsed)) {
+        return prev;
+      }
+      return { ...prev, [token]: parsed };
+    });
+  }
+
+  function clearPolicyOverride(currency: string) {
+    const token = currency.trim().toUpperCase();
+    setPolicyManualOverrides((prev) => {
+      if (!(token in prev)) return prev;
+      const cloned = { ...prev };
+      delete cloned[token];
+      return cloned;
+    });
+  }
 
   return (
     <section className="checklist-page">
@@ -883,11 +1005,139 @@ export function DataChecklistPage({ sessionToken }: Props) {
           <div className="panel-grid">
             <div className="panel ops-card">
               <h3 className="ops-card-title">Policy</h3>
-              <DataTable rows={fredPolicyRows} emptyText="No policy snapshot rows." variant="dense" />
+              {normalizedPolicyRows.length === 0 ? (
+                <div className="rounded-md border border-red-400/30 bg-zinc-950/40 px-3 py-4 text-sm text-zinc-400">
+                  No policy snapshot rows.
+                </div>
+              ) : (
+                <div className="w-full overflow-x-auto rounded-md border border-red-500/30 bg-zinc-950/40">
+                  <table className="min-w-[1120px] table-auto text-left text-xs text-zinc-200">
+                    <thead className="border-b border-red-500/30 bg-zinc-900/90 text-[11px] uppercase tracking-wide text-zinc-300">
+                      <tr>
+                        <th className="px-3 py-2">CURRENCY</th>
+                        <th className="px-3 py-2">SERIES_ID</th>
+                        <th className="px-3 py-2">VALUE</th>
+                        <th className="px-3 py-2">
+                          <span className="inline-flex items-center gap-1">
+                            MANUAL OVERRIDE
+                            <span
+                              className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-zinc-600 text-[10px] text-zinc-400"
+                              title="Overrides FRED value. Persists across refreshes."
+                            >
+                              i
+                            </span>
+                          </span>
+                        </th>
+                        <th className="px-3 py-2">AUX</th>
+                        <th className="px-3 py-2">AS_OF_UTC</th>
+                        <th className="px-3 py-2">STATUS</th>
+                        <th className="px-3 py-2">ERROR_MESSAGE</th>
+                        <th className="px-3 py-2">OFFICIAL NOTE</th>
+                        <th className="px-3 py-2">REFRESHED_AT_UTC</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800">
+                      {normalizedPolicyRows.map((row) => {
+                        const overrideValue = policyManualOverrides[row.currency];
+                        const hasManualOverride = Number.isFinite(overrideValue);
+                        return (
+                          <tr key={`${row.currency}-${row.seriesId}-${row.refreshedAtUtc}`} className="align-top">
+                            <td className="px-3 py-2 font-semibold text-zinc-100">{row.currency || "n/a"}</td>
+                            <td className="px-3 py-2 font-mono text-zinc-300">{row.seriesId || "n/a"}</td>
+                            <td className="px-3 py-2">
+                              {hasManualOverride ? (
+                                <span className="font-bold text-emerald-400">
+                                  {toDisplayNumber(overrideValue, 2)} (manual)
+                                </span>
+                              ) : (
+                                <span>{toDisplayNumber(row.value, 2)}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="inline-flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="—"
+                                  className="w-24 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus:border-red-400 focus:outline-none"
+                                  value={hasManualOverride ? String(overrideValue) : ""}
+                                  onChange={(e) => updatePolicyOverride(row.currency, e.target.value)}
+                                />
+                                {hasManualOverride && (
+                                  <button
+                                    type="button"
+                                    className="rounded border border-zinc-700 px-1.5 py-0.5 text-xs text-zinc-300 hover:border-red-400 hover:text-red-300"
+                                    onClick={() => clearPolicyOverride(row.currency)}
+                                    aria-label={`Clear override for ${row.currency}`}
+                                  >
+                                    ×
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-zinc-300">{String(row.aux ?? "")}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.asOfUtc || "n/a"}</td>
+                            <td className={`px-3 py-2 font-semibold ${statusToneClass(row.status)}`}>{row.status || "n/a"}</td>
+                            <td className="max-w-[220px] px-3 py-2 text-red-300">{row.errorMessage || "—"}</td>
+                            <td className="max-w-[280px] px-3 py-2 text-zinc-300">{policyOfficialNotes[row.currency] ?? "n/a"}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.refreshedAtUtc || "n/a"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
             <div className="panel ops-card">
               <h3 className="ops-card-title">Inflation</h3>
-              <DataTable rows={fredInflRows} emptyText="No inflation snapshot rows." variant="dense" />
+              {normalizedInflRows.length === 0 ? (
+                <div className="rounded-md border border-red-400/30 bg-zinc-950/40 px-3 py-4 text-sm text-zinc-400">
+                  No inflation snapshot rows.
+                </div>
+              ) : (
+                <div className="w-full overflow-x-auto rounded-md border border-red-500/30 bg-zinc-950/40">
+                  <table className="min-w-[1140px] table-auto text-left text-xs text-zinc-200">
+                    <thead className="border-b border-red-500/30 bg-zinc-900/90 text-[11px] uppercase tracking-wide text-zinc-300">
+                      <tr>
+                        <th className="px-3 py-2">CURRENCY</th>
+                        <th className="px-3 py-2">SERIES_ID</th>
+                        <th className="px-3 py-2">INDEX</th>
+                        <th className="px-3 py-2">YoY %</th>
+                        <th className="px-3 py-2">MoM %</th>
+                        <th className="px-3 py-2">AUX</th>
+                        <th className="px-3 py-2">AS_OF_UTC</th>
+                        <th className="px-3 py-2">STATUS</th>
+                        <th className="px-3 py-2">ERROR_MESSAGE</th>
+                        <th className="px-3 py-2">REFRESHED_AT_UTC</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800">
+                      {normalizedInflRows.map((row) => {
+                        const yoyClass = row.yoy !== null && row.yoy > 2
+                          ? "text-emerald-400"
+                          : row.yoy !== null && row.yoy < 1
+                            ? "text-red-400"
+                            : "text-zinc-200";
+                        return (
+                          <tr key={`${row.currency}-${row.seriesId}-${row.refreshedAtUtc}`} className="align-top">
+                            <td className="px-3 py-2 font-semibold text-zinc-100">{row.currency || "n/a"}</td>
+                            <td className="px-3 py-2 font-mono text-zinc-300">{row.seriesId || "n/a"}</td>
+                            <td className="px-3 py-2">{toDisplayNumber(row.value, 2)}</td>
+                            <td className={`px-3 py-2 font-semibold ${yoyClass}`}>{formatPercent(row.yoy)}</td>
+                            <td className="px-3 py-2">{formatPercent(row.mom)}</td>
+                            <td className="px-3 py-2 text-zinc-300">{String(row.aux ?? "")}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.asOfUtc || "n/a"}</td>
+                            <td className={`px-3 py-2 font-semibold ${statusToneClass(row.status)}`}>{row.status || "n/a"}</td>
+                            <td className="max-w-[220px] px-3 py-2 text-red-300">{row.errorMessage || "—"}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.refreshedAtUtc || "n/a"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </>
