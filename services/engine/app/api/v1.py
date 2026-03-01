@@ -129,6 +129,99 @@ def _parse_symbols_csv(value: str) -> list[str]:
     return out
 
 
+def _parse_csv_tokens(value: str) -> list[str]:
+    return [x.strip() for x in str(value or "").split(",") if x.strip()]
+
+
+def _pick_existing_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    if df.empty:
+        return None
+    cols_by_lower = {str(col).lower(): str(col) for col in df.columns}
+    for candidate in candidates:
+        hit = cols_by_lower.get(candidate.lower())
+        if hit:
+            return hit
+    return None
+
+
+def _to_display_values(df: pd.DataFrame, col: str | None) -> list[str]:
+    if not col or col not in df.columns or df.empty:
+        return []
+    values = (
+        df[col]
+        .dropna()
+        .astype(str)
+        .map(lambda x: x.strip())
+        .replace("", pd.NA)
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    return sorted([str(v) for v in values], key=lambda x: x.upper())
+
+
+def _resolve_anchor_local_dt(anchor_text: str, tz_name: str) -> datetime:
+    zone = pytz.timezone(tz_name)
+    if str(anchor_text or "").strip():
+        parsed = pd.to_datetime(anchor_text, errors="coerce")
+        if parsed is not pd.NaT:
+            as_dt = parsed.to_pydatetime()
+            if as_dt.tzinfo is None:
+                return zone.localize(as_dt)
+            return as_dt.astimezone(zone)
+    return datetime.now(timezone.utc).astimezone(zone)
+
+
+def _apply_calendar_date_preset(
+    df: pd.DataFrame,
+    event_ts_col: str | None,
+    date_preset: str,
+    date_from: str,
+    date_to: str,
+    tz_name: str,
+    local_anchor: str,
+) -> pd.DataFrame:
+    if df.empty or not event_ts_col or event_ts_col not in df.columns:
+        return df
+
+    token = str(date_preset or "").strip().lower()
+    if token not in {"yesterday", "today", "tomorrow", "this_week", "next_week", "custom"}:
+        return df
+
+    zone = pytz.timezone(tz_name)
+    event_ts = pd.to_datetime(df[event_ts_col], errors="coerce", utc=True)
+    event_local_date = event_ts.dt.tz_convert(zone).dt.date
+    anchor_local = _resolve_anchor_local_dt(local_anchor, tz_name).date()
+
+    if token == "yesterday":
+        start_date = anchor_local - timedelta(days=1)
+        end_date = start_date
+    elif token == "today":
+        start_date = anchor_local
+        end_date = anchor_local
+    elif token == "tomorrow":
+        start_date = anchor_local + timedelta(days=1)
+        end_date = start_date
+    elif token == "this_week":
+        start_date = anchor_local - timedelta(days=anchor_local.weekday())
+        end_date = start_date + timedelta(days=6)
+    elif token == "next_week":
+        start_date = anchor_local - timedelta(days=anchor_local.weekday()) + timedelta(days=7)
+        end_date = start_date + timedelta(days=6)
+    else:
+        from_date = pd.to_datetime(str(date_from or "").strip(), errors="coerce")
+        to_date = pd.to_datetime(str(date_to or "").strip(), errors="coerce")
+        if pd.isna(from_date) and pd.isna(to_date):
+            return df
+        start_date = anchor_local if pd.isna(from_date) else from_date.date()
+        end_date = start_date if pd.isna(to_date) else to_date.date()
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+
+    mask = event_local_date.between(start_date, end_date)
+    return df[mask.fillna(False)].copy()
+
+
 
 def _release_manifest_url(base_url: str, channel: str) -> str:
     token = str(channel or "stable").strip().lower()
@@ -950,11 +1043,91 @@ def get_price_preview(request: Request, limit: int = Query(default=50, ge=1, le=
 
 
 @router.get("/preview/calendar", dependencies=[Depends(_must_auth)])
-def get_calendar_preview(request: Request, limit: int = Query(default=50, ge=1, le=500)):
+def get_calendar_preview(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=500),
+    sort_by: str = Query(default="event_time_utc"),
+    sort_dir: str = Query(default="desc"),
+    date_preset: str = Query(default="today"),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+    local_anchor: str = Query(default=""),
+    currencies_csv: str = Query(default=""),
+    categories_csv: str = Query(default=""),
+    impacts_csv: str = Query(default=""),
+):
     services = _service(request)
     path = services["settings"].parquet_dir / "calendar_latest.parquet"
     df = _load_calendar_df(path)
-    return envelope(request, {"rows": _to_rows(df, limit=int(limit)), "count": int(len(df))})
+    total_count = int(len(df))
+    if df.empty:
+        return envelope(
+            request,
+            {
+                "rows": [],
+                "count": 0,
+                "filtered_count": 0,
+                "filter_options": {"currencies": [], "categories": [], "impacts": []},
+            },
+        )
+
+    currency_col = _pick_existing_column(df, ["CURRENCY"])
+    category_col = _pick_existing_column(df, ["CATEGORY", "EVENT"])
+    impact_col = _pick_existing_column(df, ["IMPACT", "PRIORITY"])
+    event_ts_col = _pick_existing_column(df, ["EVENTTIMEUTC", "TimeUTC"])
+    server_ts_col = _pick_existing_column(df, ["SERVERDATETIME"])
+
+    filter_options = {
+        "currencies": _to_display_values(df, currency_col),
+        "categories": _to_display_values(df, category_col),
+        "impacts": _to_display_values(df, impact_col),
+    }
+
+    out = df.copy()
+    tz_name = str(services["state"].display_timezone or DISPLAY_TZ_DEFAULT)
+    out = _apply_calendar_date_preset(
+        out,
+        event_ts_col=event_ts_col,
+        date_preset=date_preset,
+        date_from=date_from,
+        date_to=date_to,
+        tz_name=tz_name,
+        local_anchor=local_anchor,
+    )
+
+    currency_tokens = {x.upper() for x in _parse_csv_tokens(currencies_csv)}
+    if currency_tokens and currency_col and currency_col in out.columns:
+        series = out[currency_col].astype(str).str.upper().str.strip()
+        out = out[series.isin(currency_tokens)].copy()
+
+    category_tokens = {x.upper() for x in _parse_csv_tokens(categories_csv)}
+    if category_tokens and category_col and category_col in out.columns:
+        series = out[category_col].astype(str).str.upper().str.strip()
+        out = out[series.isin(category_tokens)].copy()
+
+    impact_tokens = {x.upper() for x in _parse_csv_tokens(impacts_csv)}
+    if impact_tokens and impact_col and impact_col in out.columns:
+        series = out[impact_col].astype(str).str.upper().str.strip()
+        out = out[series.isin(impact_tokens)].copy()
+
+    sort_key = str(sort_by or "event_time_utc").strip().lower()
+    ascending = str(sort_dir or "desc").strip().lower() == "asc"
+    if sort_key == "server_datetime" and server_ts_col and server_ts_col in out.columns:
+        sort_series = pd.to_datetime(out[server_ts_col], errors="coerce", utc=True)
+        out = out.assign(__sort_ts=sort_series).sort_values("__sort_ts", ascending=ascending, kind="mergesort").drop(columns=["__sort_ts"])
+    elif event_ts_col and event_ts_col in out.columns:
+        sort_series = pd.to_datetime(out[event_ts_col], errors="coerce", utc=True)
+        out = out.assign(__sort_ts=sort_series).sort_values("__sort_ts", ascending=ascending, kind="mergesort").drop(columns=["__sort_ts"])
+
+    return envelope(
+        request,
+        {
+            "rows": _to_rows(out, limit=int(limit)),
+            "count": total_count,
+            "filtered_count": int(len(out)),
+            "filter_options": filter_options,
+        },
+    )
 
 
 @router.get("/dashboard/cards", dependencies=[Depends(_must_auth)])

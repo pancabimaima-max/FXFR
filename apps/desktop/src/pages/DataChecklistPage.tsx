@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type { WsEvent } from "@fxfr/contracts";
 
 import {
+  type CalendarPreviewParams,
   fetchCalendarPreview,
   fetchChecklist,
   fetchFredSnapshot,
@@ -213,6 +214,63 @@ function formatPercent(value: number | null): string {
   return `${value.toFixed(1)}%`;
 }
 
+type CalendarDatePreset = "yesterday" | "today" | "tomorrow" | "this_week" | "next_week" | "custom";
+
+const calendarDatePresetItems: Array<{ value: CalendarDatePreset; label: string }> = [
+  { value: "yesterday", label: "Yesterday" },
+  { value: "today", label: "Today" },
+  { value: "tomorrow", label: "Tomorrow" },
+  { value: "this_week", label: "This Week" },
+  { value: "next_week", label: "Next Week" },
+  { value: "custom", label: "Custom Date" },
+];
+
+const currencyToFlagCode: Record<string, string> = {
+  AUD: "au",
+  CAD: "ca",
+  CHF: "ch",
+  CNY: "cn",
+  EUR: "eu",
+  GBP: "gb",
+  JPY: "jp",
+  NZD: "nz",
+  USD: "us",
+};
+
+const currencyToCountryLabel: Record<string, string> = {
+  AUD: "Australia",
+  CAD: "Canada",
+  CHF: "Switzerland",
+  CNY: "China",
+  EUR: "Europe",
+  GBP: "United Kingdom",
+  JPY: "Japan",
+  NZD: "New Zealand",
+  USD: "United States",
+};
+
+function getRowValue(row: Record<string, unknown>, keys: string[]): unknown {
+  const keyMap = new Map<string, string>();
+  for (const existingKey of Object.keys(row)) {
+    keyMap.set(existingKey.toLowerCase(), existingKey);
+  }
+  for (const key of keys) {
+    if (key in row) {
+      return row[key];
+    }
+    const matchedKey = keyMap.get(key.toLowerCase());
+    if (matchedKey) {
+      return row[matchedKey];
+    }
+  }
+  return undefined;
+}
+
+function asDisplayText(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "n/a";
+  return String(value);
+}
+
 export function DataChecklistPage({ sessionToken }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [loading, setLoading] = useState(true);
@@ -234,6 +292,25 @@ export function DataChecklistPage({ sessionToken }: Props) {
     droppedInvalidTimeRows: 0,
   });
   const [calendarPreviewRows, setCalendarPreviewRows] = useState<Record<string, unknown>[]>([]);
+  const [calendarFilteredCount, setCalendarFilteredCount] = useState(0);
+  const [calendarFilterOptions, setCalendarFilterOptions] = useState<{
+    currencies: string[];
+    categories: string[];
+    impacts: string[];
+  }>({
+    currencies: [],
+    categories: [],
+    impacts: [],
+  });
+  const [calendarPreset, setCalendarPreset] = useState<CalendarDatePreset>("today");
+  const [calendarCustomFrom, setCalendarCustomFrom] = useState("");
+  const [calendarCustomTo, setCalendarCustomTo] = useState("");
+  const [calendarCountry, setCalendarCountry] = useState("ALL");
+  const [calendarCategory, setCalendarCategory] = useState("ALL");
+  const [calendarImpact, setCalendarImpact] = useState("ALL");
+  const [calendarSortBy] = useState<"event_time_utc" | "server_datetime">("event_time_utc");
+  const [calendarSortDir] = useState<"asc" | "desc">("desc");
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const [fredPolicyRows, setFredPolicyRows] = useState<Record<string, unknown>[]>([]);
   const [fredInflRows, setFredInflRows] = useState<Record<string, unknown>[]>([]);
   const [policyManualOverrides, setPolicyManualOverrides] = useState<Record<string, number>>({});
@@ -340,11 +417,50 @@ export function DataChecklistPage({ sessionToken }: Props) {
     setServerTz(String(runtimeRes.data.timezone_server ?? "Asia/Gaza"));
   }
 
+  const buildCalendarPreviewParams = useCallback((): CalendarPreviewParams => {
+    const localAnchor = String(overview?.market_session?.local_time ?? "").trim();
+    return {
+      sort_by: calendarSortBy,
+      sort_dir: calendarSortDir,
+      date_preset: calendarPreset,
+      date_from: calendarPreset === "custom" ? calendarCustomFrom : "",
+      date_to: calendarPreset === "custom" ? calendarCustomTo : "",
+      local_anchor: localAnchor,
+      currencies_csv: calendarCountry !== "ALL" ? calendarCountry : "",
+      categories_csv: calendarCategory !== "ALL" ? calendarCategory : "",
+      impacts_csv: calendarImpact !== "ALL" ? calendarImpact : "",
+    };
+  }, [
+    overview?.market_session?.local_time,
+    calendarSortBy,
+    calendarSortDir,
+    calendarPreset,
+    calendarCustomFrom,
+    calendarCustomTo,
+    calendarCountry,
+    calendarCategory,
+    calendarImpact,
+  ]);
+
+  const loadCalendarPreview = useCallback(async () => {
+    setCalendarLoading(true);
+    try {
+      const calendarRes = await fetchCalendarPreview(sessionToken, 50, buildCalendarPreviewParams());
+      const data = calendarRes.data ?? {};
+      setCalendarPreviewRows(data.rows ?? []);
+      setCalendarFilteredCount(Number(data.filtered_count ?? 0));
+      setCalendarFilterOptions({
+        currencies: Array.isArray(data.filter_options?.currencies) ? data.filter_options.currencies.map(String) : [],
+        categories: Array.isArray(data.filter_options?.categories) ? data.filter_options.categories.map(String) : [],
+        impacts: Array.isArray(data.filter_options?.impacts) ? data.filter_options.impacts.map(String) : [],
+      });
+    } finally {
+      setCalendarLoading(false);
+    }
+  }, [sessionToken, buildCalendarPreviewParams]);
+
   async function loadPreviews() {
-    const [priceRes, calendarRes] = await Promise.all([
-      fetchPricePreview(sessionToken, 50, activePair),
-      fetchCalendarPreview(sessionToken, 50),
-    ]);
+    const priceRes = await fetchPricePreview(sessionToken, 50, activePair);
     const priceData = priceRes.data ?? {};
     const newestUtc = String(priceData.preview_max_time_utc ?? "");
     setPricePreviewRows(priceData.rows ?? []);
@@ -357,7 +473,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
       filteredRows: Number(priceData.debug?.filtered_rows ?? 0),
       droppedInvalidTimeRows: Number(priceData.debug?.dropped_invalid_time_rows ?? 0),
     });
-    setCalendarPreviewRows(calendarRes.data.rows ?? []);
+    await loadCalendarPreview();
   }
 
   async function loadFredSnapshots() {
@@ -420,6 +536,13 @@ export function DataChecklistPage({ sessionToken }: Props) {
       cancelled = true;
     };
   }, [sessionToken, reloadSeed, activePair]);
+
+  useEffect(() => {
+    if (loading || error || activeTab !== "Economic Calendar Data") {
+      return;
+    }
+    void loadCalendarPreview();
+  }, [activeTab, loading, error, loadCalendarPreview]);
 
   useEffect(() => {
     let closed = false;
@@ -749,6 +872,31 @@ export function DataChecklistPage({ sessionToken }: Props) {
       }),
     [fredInflRows],
   );
+  const normalizedCalendarRows = useMemo(
+    () =>
+      calendarPreviewRows.map((row) => {
+        const currency = String(getRowValue(row, ["CURRENCY", "currency"]) ?? "").trim().toUpperCase();
+        const category = String(getRowValue(row, ["CATEGORY", "category", "EVENT", "event"]) ?? "").trim();
+        const impact = String(getRowValue(row, ["IMPACT", "impact", "PRIORITY", "priority"]) ?? "").trim();
+        return {
+          row,
+          currency: currency || "n/a",
+          country: currencyToCountryLabel[currency] ?? (currency || "n/a"),
+          category: category || "n/a",
+          impact: impact || "n/a",
+          event: asDisplayText(getRowValue(row, ["EVENT", "event"])),
+          period: asDisplayText(getRowValue(row, ["PERIOD", "period"])),
+          actual: asDisplayText(getRowValue(row, ["ACTUAL", "actual"])),
+          forecast: asDisplayText(getRowValue(row, ["FORECAST", "forecast"])),
+          previous: asDisplayText(getRowValue(row, ["PREVIOUS", "previous"])),
+          eventTimeUtc: asDisplayText(getRowValue(row, ["EVENTTIMEUTC", "EventTimeUTC", "TimeUTC", "time_utc"])),
+          serverDateTime: asDisplayText(getRowValue(row, ["SERVERDATETIME", "ServerDateTime"])),
+          timeMode: asDisplayText(getRowValue(row, ["TIMEMODE", "TimeMode"])),
+          flagCode: currencyToFlagCode[currency],
+        };
+      }),
+    [calendarPreviewRows],
+  );
 
   function updatePolicyOverride(currency: string, rawInput: string) {
     const token = currency.trim().toUpperCase();
@@ -973,8 +1121,119 @@ export function DataChecklistPage({ sessionToken }: Props) {
           </div>
 
           <div className="panel ops-card">
-            <h2 className="ops-card-title">Calendar Preview (50 rows)</h2>
-            <DataTable rows={calendarPreviewRows} emptyText="No calendar data loaded." />
+            <h2 className="ops-card-title">Calendar Preview</h2>
+            <p className="muted">
+              Local clock anchor: {String(overview?.market_session?.local_time ?? "n/a")} | Rows shown: {normalizedCalendarRows.length} / {calendarFilteredCount}
+            </p>
+            <div className="calendar-preset-row">
+              {calendarDatePresetItems.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  className={`btn btn-ghost ${calendarPreset === preset.value ? "active" : ""}`}
+                  onClick={() => setCalendarPreset(preset.value)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            {calendarPreset === "custom" && (
+              <div className="form-grid calendar-custom-range">
+                <div className="form-field">
+                  <label>Custom From</label>
+                  <input className="control-field" type="date" value={calendarCustomFrom} onChange={(e) => setCalendarCustomFrom(e.target.value)} />
+                </div>
+                <div className="form-field">
+                  <label>Custom To</label>
+                  <input className="control-field" type="date" value={calendarCustomTo} onChange={(e) => setCalendarCustomTo(e.target.value)} />
+                </div>
+              </div>
+            )}
+            <div className="form-grid calendar-filter-grid">
+              <div className="form-field">
+                <label>Country</label>
+                <select className="control-field" value={calendarCountry} onChange={(e) => setCalendarCountry(e.target.value)}>
+                  <option value="ALL">All Countries</option>
+                  {calendarFilterOptions.currencies.map((token) => (
+                    <option key={token} value={token}>
+                      {currencyToCountryLabel[token] ? `${token} - ${currencyToCountryLabel[token]}` : token}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>Category</label>
+                <select className="control-field" value={calendarCategory} onChange={(e) => setCalendarCategory(e.target.value)}>
+                  <option value="ALL">All Categories</option>
+                  {calendarFilterOptions.categories.map((token) => (
+                    <option key={token} value={token}>
+                      {token}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>Impact</label>
+                <select className="control-field" value={calendarImpact} onChange={(e) => setCalendarImpact(e.target.value)}>
+                  <option value="ALL">All Impacts</option>
+                  {calendarFilterOptions.impacts.map((token) => (
+                    <option key={token} value={token}>
+                      {token}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {calendarLoading ? (
+              <p className="muted">Loading calendar preview...</p>
+            ) : normalizedCalendarRows.length === 0 ? (
+              <div className="panel muted empty-state-card">No calendar data loaded.</div>
+            ) : (
+              <div className="table-wrap calendar-preview-wrap ui-scroll-region">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Flag</th>
+                      <th>Country</th>
+                      <th>Category</th>
+                      <th>Impact</th>
+                      <th>Event</th>
+                      <th>Period</th>
+                      <th>Actual</th>
+                      <th>Forecast</th>
+                      <th>Previous</th>
+                      <th>EventTimeUTC</th>
+                      <th>ServerDateTime</th>
+                      <th>TimeMode</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {normalizedCalendarRows.map((row, idx) => (
+                      <tr key={`${row.currency}-${row.eventTimeUtc}-${idx}`}>
+                        <td>
+                          {row.flagCode ? (
+                            <span className={`fi fi-${row.flagCode} calendar-flag`} title={row.country} />
+                          ) : (
+                            <span className="calendar-flag-fallback">{row.currency}</span>
+                          )}
+                        </td>
+                        <td>{row.country}</td>
+                        <td>{row.category}</td>
+                        <td>{row.impact}</td>
+                        <td>{row.event}</td>
+                        <td>{row.period}</td>
+                        <td>{row.actual}</td>
+                        <td>{row.forecast}</td>
+                        <td>{row.previous}</td>
+                        <td>{row.eventTimeUtc}</td>
+                        <td>{row.serverDateTime}</td>
+                        <td>{row.timeMode}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   color-scheme: dark;
 }
@@ -941,6 +945,51 @@ button:focus-visible:not(.btn) {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.calendar-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+
+.calendar-preset-row .btn.btn-ghost.active {
+  border-color: var(--fx-color-accent-secondary);
+  background: linear-gradient(180deg, var(--fx-color-accent-soft) 0%, var(--fx-color-accent-subtle) 100%);
+  box-shadow: var(--fx-effect-glow-pill);
+}
+
+.calendar-custom-range {
+  margin: 2px 0 6px;
+}
+
+.calendar-filter-grid {
+  margin: 2px 0 8px;
+}
+
+.calendar-preview-wrap .data-table {
+  min-width: 1080px;
+}
+
+.calendar-flag {
+  font-size: 1rem;
+  border-radius: 2px;
+}
+
+.calendar-flag-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--fx-color-surface-border-strong);
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--fx-color-text-secondary);
+  background: var(--fx-color-surface-ops-inset);
 }
 
 .carry-table-shell {

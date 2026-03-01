@@ -197,9 +197,30 @@ export async function fetchPricePreview(sessionToken: string, limit = 50, symbol
   );
 }
 
-export async function fetchCalendarPreview(sessionToken: string, limit = 50) {
-  return request<{ rows: Record<string, unknown>[]; count: number }>(
-    withQuery("/v1/preview/calendar", { limit }),
+export type CalendarPreviewParams = {
+  sort_by?: "event_time_utc" | "server_datetime";
+  sort_dir?: "asc" | "desc";
+  date_preset?: "yesterday" | "today" | "tomorrow" | "this_week" | "next_week" | "custom";
+  date_from?: string;
+  date_to?: string;
+  local_anchor?: string;
+  currencies_csv?: string;
+  categories_csv?: string;
+  impacts_csv?: string;
+};
+
+export async function fetchCalendarPreview(sessionToken: string, limit = 50, params: CalendarPreviewParams = {}) {
+  return request<{
+    rows: Record<string, unknown>[];
+    count: number;
+    filtered_count?: number;
+    filter_options?: {
+      currencies?: string[];
+      categories?: string[];
+      impacts?: string[];
+    };
+  }>(
+    withQuery("/v1/preview/calendar", { limit, ...params }),
     { method: "GET" },
     sessionToken,
   );
