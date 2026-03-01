@@ -297,6 +297,15 @@ function formatLocalReadable(value: string): string {
   return formatDateTime(value) || value;
 }
 
+function formatDateCompact(value: string | undefined | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC", hour12: false });
+  return `${date}  ·  ${time} UTC`;
+}
+
 function formatAuxLines(value: unknown): string[] {
   if (value === null || value === undefined || value === "") return [];
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -309,8 +318,12 @@ function formatAuxLines(value: unknown): string[] {
       .filter((entry) => entry.length > 0);
   }
   if (typeof value === "object") {
+    const PERCENT_KEYS = new Set(["yoy", "mom"]);
     const entries = Object.entries(value as Record<string, unknown>)
       .flatMap(([key, entry]) => {
+        if (PERCENT_KEYS.has(key) && typeof entry === "number") {
+          return [`${key}: ${entry.toFixed(2)}%`];
+        }
         const formatted = formatAuxLines(entry);
         if (formatted.length === 0) return [];
         if (formatted.length === 1) return [`${key}: ${formatted[0]}`];
@@ -410,6 +423,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const [fredInflRows, setFredInflRows] = useState<Record<string, unknown>[]>([]);
   const [policyManualOverrides, setPolicyManualOverrides] = useState<Record<string, number>>({});
   const [fredExpandedCards, setFredExpandedCards] = useState<Record<string, boolean>>({});
+  const [fredAccordions, setFredAccordions] = useState<Record<string, Record<string, boolean>>>({});
   const [busyAction, setBusyAction] = useState("");
   const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
   const [error, setError] = useState("");
@@ -988,11 +1002,13 @@ export function DataChecklistPage({ sessionToken }: Props) {
         const auxObj = (row.aux ?? {}) as Record<string, unknown>;
         const observations = toObservationsArray(auxObj.observations);
         const deltas = computeInflationDeltasFromObservations(observations);
+        const auxYoy = typeof auxObj.yoy === "number" ? auxObj.yoy : null;
+        const auxMom = typeof auxObj.mom === "number" ? auxObj.mom : null;
         return {
           ...normalized,
           seriesId: normalized.currency === "AUD" ? "AUSCPALTT01IXNBQ" : normalized.seriesId,
-          yoy: deltas.yoy,
-          mom: deltas.mom,
+          yoy: deltas.yoy ?? auxYoy,
+          mom: deltas.mom ?? auxMom,
         };
       }),
     [fredInflRows],
@@ -1086,6 +1102,13 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
   function toggleFredDetails(cardKey: string) {
     setFredExpandedCards((prev) => ({ ...prev, [cardKey]: !prev[cardKey] }));
+  }
+
+  function toggleFredAccordion(cardKey: string, section: string) {
+    setFredAccordions((prev) => ({
+      ...prev,
+      [cardKey]: { ...(prev[cardKey] ?? {}), [section]: !(prev[cardKey]?.[section] ?? false) },
+    }));
   }
 
   return (
@@ -1486,6 +1509,9 @@ export function DataChecklistPage({ sessionToken }: Props) {
                   const statusLabelText = hasError
                     ? "error"
                     : String(policyRow?.status || inflationRow?.status || "n/a");
+                  const accordionState = fredAccordions[cardKey] ?? {};
+                  const policyOpen = accordionState["policy"] ?? false;
+                  const inflationOpen = accordionState["inflation"] ?? false;
 
                   return (
                     <article key={card.currency} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md">
@@ -1553,132 +1579,145 @@ export function DataChecklistPage({ sessionToken }: Props) {
                         </button>
                       </div>
 
-                      {cardExpanded && (
-                        <div className="border-t border-slate-200 bg-slate-50 p-5 text-xs text-slate-700">
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <div className="rounded-lg border border-slate-200 bg-white p-3">
-                              <p className="mb-2 text-sm font-semibold text-slate-900">Policy</p>
-                              <div className="grid gap-2">
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Series ID</span>
-                                  <span className="font-mono text-slate-700">{policyRow?.seriesId || "—"}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">As Of</span>
-                                  <span>{formatUtcReadable(policyRow?.asOfUtc || "")}</span>
-                                  <span className="text-slate-500">{formatLocalReadable(policyRow?.asOfUtc || "")}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Error Message</span>
-                                  <span>{policyRow?.errorMessage || "—"}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Official Note</span>
-                                  <span>{policyOfficialNotes[card.currency] ?? "—"}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Refreshed</span>
-                                  <span>{formatUtcReadable(policyRow?.refreshedAtUtc || "")}</span>
-                                  <span className="text-slate-500">{formatLocalReadable(policyRow?.refreshedAtUtc || "")}</span>
-                                </div>
-                                <div className="grid gap-1">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">AUX</span>
-                                  {policyAuxLines.length === 0 ? (
-                                    <span>—</span>
-                                  ) : (
-                                    <ul className="grid gap-1">
-                                      {policyAuxLines.map((line) => (
-                                        <li key={`policy-aux-${line}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
-                                          {line}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-slate-200 bg-white p-3">
-                              <p className="mb-2 text-sm font-semibold text-slate-900">Inflation</p>
-                              <div className="grid gap-2">
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Series ID</span>
-                                  <span className="font-mono text-slate-700">{inflationRow?.seriesId || "—"}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">As Of</span>
-                                  <span>{formatUtcReadable(inflationRow?.asOfUtc || "")}</span>
-                                  <span className="text-slate-500">{formatLocalReadable(inflationRow?.asOfUtc || "")}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Error Message</span>
-                                  <span>{inflationRow?.errorMessage || "—"}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">YoY</span>
-                                  <span>{formatPercent(inflationRow?.yoy ?? null) || "—"}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">MoM</span>
-                                  <span>{formatPercent(inflationRow?.mom ?? null) || "—"}</span>
-                                </div>
-                                <div className="grid gap-0.5">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Refreshed</span>
-                                  <span>{formatUtcReadable(inflationRow?.refreshedAtUtc || "")}</span>
-                                  <span className="text-slate-500">{formatLocalReadable(inflationRow?.refreshedAtUtc || "")}</span>
-                                </div>
-                                <div className="grid gap-1">
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">AUX</span>
-                                  {inflationAuxLines.length === 0 ? (
-                                    <span>—</span>
-                                  ) : (
-                                    <ul className="grid gap-1">
-                                      {inflationAuxLines.map((line) => (
-                                        <li key={`inflation-aux-${line}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
-                                          {line}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                              </div>
+                      {cardExpanded && (() => {
+                        const detailRow = (label: string, value: React.ReactNode, opts?: { mono?: boolean; red?: boolean }) => (
+                          <div key={label} className="flex items-start gap-3 border-b border-slate-100 py-1.5 last:border-0">
+                            <span className="w-24 shrink-0 text-[11px] uppercase tracking-wide text-slate-400">{label}</span>
+                            <span className={`flex-1 break-words ${opts?.mono ? "font-mono" : ""} ${opts?.red ? "text-red-600" : "text-slate-700"}`}>
+                              {value}
+                            </span>
+                          </div>
+                        );
+                        const auxChips = (lines: string[]) => (
+                          <div className="flex items-start gap-3 py-1.5">
+                            <span className="w-24 shrink-0 text-[11px] uppercase tracking-wide text-slate-400">AUX</span>
+                            <div className="flex flex-1 flex-wrap gap-1.5">
+                              {lines.length === 0 ? (
+                                <span className="text-slate-400">—</span>
+                              ) : (
+                                lines.map((line) => (
+                                  <span key={line} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] text-slate-600">
+                                    {line}
+                                  </span>
+                                ))
+                              )}
                             </div>
                           </div>
-                          {policyRow && (
-                            <div className="mt-3 border-t border-slate-200 pt-3">
-                              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Manual Override (Policy)</p>
-                              <div className="inline-flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="—"
-                                  className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none transition focus:border-blue-500"
-                                  value={hasManualOverride ? String(overrideValue) : ""}
-                                  onChange={(e) => updatePolicyOverride(card.currency, e.target.value)}
-                                />
-                                {hasManualOverride && (
-                                  <button
-                                    type="button"
-                                    className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-red-300 hover:text-red-700"
-                                    onClick={() => clearPolicyOverride(card.currency)}
-                                    aria-label={`Clear override for ${card.currency}`}
-                                  >
-                                    Clear
-                                  </button>
-                                )}
-                                {!hasManualOverride && (
-                                  <span className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500">Not set</span>
-                                )}
+                        );
+                        const accordionChevron = (open: boolean) => (
+                          <svg
+                            viewBox="0 0 20 20"
+                            className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <path d="M7 5L13 10L7 15" />
+                          </svg>
+                        );
+                        return (
+                          <div className="border-t border-slate-200 bg-slate-50 text-xs text-slate-700">
+                            {/* Summary bar */}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-slate-200 bg-white px-5 py-3">
+                              {policyRow?.seriesId && (
+                                <span className="font-mono text-[11px] text-slate-500">{policyRow.seriesId}</span>
+                              )}
+                              <span className="text-slate-300" aria-hidden>·</span>
+                              <span className="text-[11px] text-slate-500">
+                                As of <span className="font-medium text-slate-700">{formatDateCompact(policyRow?.asOfUtc)}</span>
+                              </span>
+                              <span className="text-slate-300" aria-hidden>·</span>
+                              <span className="text-[11px] text-slate-500">
+                                Refreshed <span className="font-medium text-slate-700">{formatDateCompact(policyRow?.refreshedAtUtc)}</span>
+                              </span>
+                              <span
+                                className={`ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                                  hasError
+                                    ? "bg-red-50 text-red-600"
+                                    : "bg-emerald-50 text-emerald-700"
+                                }`}
+                              >
+                                {statusLabelText.toUpperCase()}
+                              </span>
+                            </div>
+
+                            {/* Policy accordion */}
+                            <div className="border-b border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => toggleFredAccordion(cardKey, "policy")}
+                                className="flex w-full items-center justify-between px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 transition-colors hover:bg-white/70"
+                              >
+                                Policy
+                                {accordionChevron(policyOpen)}
+                              </button>
+                              {policyOpen && (
+                                <div className="px-5 pb-4 pt-0.5">
+                                  {detailRow("Series ID", policyRow?.seriesId || "—", { mono: true })}
+                                  {detailRow("As Of", formatDateCompact(policyRow?.asOfUtc))}
+                                  {detailRow("Official Note", policyOfficialNotes[card.currency] ?? "—")}
+                                  {policyRow?.errorMessage ? detailRow("Error", policyRow.errorMessage, { red: true }) : null}
+                                  {detailRow("Refreshed", formatDateCompact(policyRow?.refreshedAtUtc))}
+                                  {auxChips(policyAuxLines)}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Inflation accordion */}
+                            <div className="border-b border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => toggleFredAccordion(cardKey, "inflation")}
+                                className="flex w-full items-center justify-between px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 transition-colors hover:bg-white/70"
+                              >
+                                Inflation
+                                {accordionChevron(inflationOpen)}
+                              </button>
+                              {inflationOpen && (
+                                <div className="px-5 pb-4 pt-0.5">
+                                  {detailRow("Series ID", inflationRow?.seriesId || "—", { mono: true })}
+                                  {detailRow("As Of", formatDateCompact(inflationRow?.asOfUtc))}
+                                  {detailRow("YoY", formatPercent(inflationRow?.yoy ?? null) || "—")}
+                                  {detailRow("MoM", formatPercent(inflationRow?.mom ?? null) || "—")}
+                                  {inflationRow?.errorMessage ? detailRow("Error", inflationRow.errorMessage, { red: true }) : null}
+                                  {detailRow("Refreshed", formatDateCompact(inflationRow?.refreshedAtUtc))}
+                                  {auxChips(inflationAuxLines)}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Manual override — always visible */}
+                            {policyRow && (
+                              <div className="px-5 py-3">
+                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Manual Override</p>
+                                <div className="inline-flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="—"
+                                    className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none transition focus:border-blue-500"
+                                    value={hasManualOverride ? String(overrideValue) : ""}
+                                    onChange={(e) => updatePolicyOverride(card.currency, e.target.value)}
+                                  />
+                                  {hasManualOverride && (
+                                    <button
+                                      type="button"
+                                      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-red-300 hover:text-red-700"
+                                      onClick={() => clearPolicyOverride(card.currency)}
+                                      aria-label={`Clear override for ${card.currency}`}
+                                    >
+                                      Clear
+                                    </button>
+                                  )}
+                                  {!hasManualOverride && (
+                                    <span className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500">Not set</span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )}
-                          {inflationRow && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <span className={`rounded-md border px-2 py-1 font-semibold ${fredDeltaPillClass(inflationRow.yoy)}`}>YoY {formatPercent(inflationRow.yoy) || "—"}</span>
-                              <span className={`rounded-md border px-2 py-1 font-semibold ${fredDeltaPillClass(inflationRow.mom)}`}>MoM {formatPercent(inflationRow.mom) || "—"}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        );
+                      })()}
                     </article>
                   );
                 })}
