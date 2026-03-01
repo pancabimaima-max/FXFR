@@ -279,25 +279,48 @@ function asDisplayText(value: unknown): string {
   return String(value);
 }
 
-function formatAuxValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "";
+function formatUtcReadable(value: string): string {
+  if (!value) return "—";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  const yyyy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  const hh = String(dt.getUTCHours()).padStart(2, "0");
+  const mi = String(dt.getUTCMinutes()).padStart(2, "0");
+  const ss = String(dt.getUTCSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss} UTC`;
+}
+
+function formatLocalReadable(value: string): string {
+  if (!value) return "—";
+  return formatDateTime(value) || value;
+}
+
+function formatAuxLines(value: unknown): string[] {
+  if (value === null || value === undefined || value === "") return [];
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value);
+    return [String(value)];
   }
   if (Array.isArray(value)) {
     return value
-      .map((entry) => formatAuxValue(entry))
-      .filter((entry) => entry.length > 0)
-      .join(", ");
+      .flatMap((entry) => formatAuxLines(entry))
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
   }
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>)
-      .map(([key, entry]) => [key, formatAuxValue(entry)] as const)
-      .filter(([, entry]) => entry.length > 0);
-    if (entries.length === 0) return "";
-    return entries.map(([key, entry]) => `${key}=${entry}`).join(" | ");
+      .flatMap(([key, entry]) => {
+        const formatted = formatAuxLines(entry);
+        if (formatted.length === 0) return [];
+        if (formatted.length === 1) return [`${key}: ${formatted[0]}`];
+        return [`${key}:`, ...formatted.map((line) => `- ${line}`)];
+      })
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    return entries;
   }
-  return "";
+  return [];
 }
 
 function toIsoMillis(value: string): number | null {
@@ -1457,6 +1480,8 @@ export function DataChecklistPage({ sessionToken }: Props) {
                   const policyRefreshedMs = toIsoMillis(policyRow?.refreshedAtUtc ?? "") ?? 0;
                   const inflationRefreshedMs = toIsoMillis(inflationRow?.refreshedAtUtc ?? "") ?? 0;
                   const updatedMs = Math.max(policyRefreshedMs, inflationRefreshedMs);
+                  const policyAuxLines = formatAuxLines(policyRow?.aux);
+                  const inflationAuxLines = formatAuxLines(inflationRow?.aux);
                   const hasError = String(policyRow?.status ?? "").toLowerCase() === "error" || String(inflationRow?.status ?? "").toLowerCase() === "error";
                   const statusLabelText = hasError
                     ? "error"
@@ -1468,7 +1493,9 @@ export function DataChecklistPage({ sessionToken }: Props) {
                         <div className="mb-4 flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             {flagCode ? (
-                              <span className={`fi fi-${flagCode} calendar-flag text-2xl`} title={card.country} aria-label={card.country} />
+                              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-slate-50" title={card.country} aria-label={card.country}>
+                                <span className={`fi fi-${flagCode} h-5 w-6 rounded-sm`} />
+                              </span>
                             ) : (
                               <span className="calendar-flag-fallback">{card.currency || "N/A"}</span>
                             )}
@@ -1529,24 +1556,91 @@ export function DataChecklistPage({ sessionToken }: Props) {
                       {cardExpanded && (
                         <div className="border-t border-slate-200 bg-slate-50 p-5 text-xs text-slate-700">
                           <div className="grid gap-4 md:grid-cols-2">
-                            <div className="grid gap-1">
-                              <p className="font-semibold text-slate-900">Policy</p>
-                              <p><span className="text-slate-500">SERIES_ID:</span> {policyRow?.seriesId || "—"}</p>
-                              <p><span className="text-slate-500">AS_OF_UTC:</span> {policyRow?.asOfUtc || "—"}</p>
-                              <p><span className="text-slate-500">ERROR_MESSAGE:</span> {policyRow?.errorMessage || "—"}</p>
-                              <p><span className="text-slate-500">AUX:</span> {formatAuxValue(policyRow?.aux) || "—"}</p>
-                              <p><span className="text-slate-500">OFFICIAL_NOTE:</span> {policyOfficialNotes[card.currency] ?? "—"}</p>
-                              <p><span className="text-slate-500">REFRESHED_AT_UTC:</span> {policyRow?.refreshedAtUtc || "—"}</p>
+                            <div className="rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="mb-2 text-sm font-semibold text-slate-900">Policy</p>
+                              <div className="grid gap-2">
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Series ID</span>
+                                  <span className="font-mono text-slate-700">{policyRow?.seriesId || "—"}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">As Of</span>
+                                  <span>{formatUtcReadable(policyRow?.asOfUtc || "")}</span>
+                                  <span className="text-slate-500">{formatLocalReadable(policyRow?.asOfUtc || "")}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Error Message</span>
+                                  <span>{policyRow?.errorMessage || "—"}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Official Note</span>
+                                  <span>{policyOfficialNotes[card.currency] ?? "—"}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Refreshed</span>
+                                  <span>{formatUtcReadable(policyRow?.refreshedAtUtc || "")}</span>
+                                  <span className="text-slate-500">{formatLocalReadable(policyRow?.refreshedAtUtc || "")}</span>
+                                </div>
+                                <div className="grid gap-1">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">AUX</span>
+                                  {policyAuxLines.length === 0 ? (
+                                    <span>—</span>
+                                  ) : (
+                                    <ul className="grid gap-1">
+                                      {policyAuxLines.map((line) => (
+                                        <li key={`policy-aux-${line}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
+                                          {line}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className="grid gap-1">
-                              <p className="font-semibold text-slate-900">Inflation</p>
-                              <p><span className="text-slate-500">SERIES_ID:</span> {inflationRow?.seriesId || "—"}</p>
-                              <p><span className="text-slate-500">AS_OF_UTC:</span> {inflationRow?.asOfUtc || "—"}</p>
-                              <p><span className="text-slate-500">ERROR_MESSAGE:</span> {inflationRow?.errorMessage || "—"}</p>
-                              <p><span className="text-slate-500">AUX:</span> {formatAuxValue(inflationRow?.aux) || "—"}</p>
-                              <p><span className="text-slate-500">YoY:</span> {formatPercent(inflationRow?.yoy ?? null) || "—"}</p>
-                              <p><span className="text-slate-500">MoM:</span> {formatPercent(inflationRow?.mom ?? null) || "—"}</p>
-                              <p><span className="text-slate-500">REFRESHED_AT_UTC:</span> {inflationRow?.refreshedAtUtc || "—"}</p>
+                            <div className="rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="mb-2 text-sm font-semibold text-slate-900">Inflation</p>
+                              <div className="grid gap-2">
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Series ID</span>
+                                  <span className="font-mono text-slate-700">{inflationRow?.seriesId || "—"}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">As Of</span>
+                                  <span>{formatUtcReadable(inflationRow?.asOfUtc || "")}</span>
+                                  <span className="text-slate-500">{formatLocalReadable(inflationRow?.asOfUtc || "")}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Error Message</span>
+                                  <span>{inflationRow?.errorMessage || "—"}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">YoY</span>
+                                  <span>{formatPercent(inflationRow?.yoy ?? null) || "—"}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">MoM</span>
+                                  <span>{formatPercent(inflationRow?.mom ?? null) || "—"}</span>
+                                </div>
+                                <div className="grid gap-0.5">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">Refreshed</span>
+                                  <span>{formatUtcReadable(inflationRow?.refreshedAtUtc || "")}</span>
+                                  <span className="text-slate-500">{formatLocalReadable(inflationRow?.refreshedAtUtc || "")}</span>
+                                </div>
+                                <div className="grid gap-1">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-500">AUX</span>
+                                  {inflationAuxLines.length === 0 ? (
+                                    <span>—</span>
+                                  ) : (
+                                    <ul className="grid gap-1">
+                                      {inflationAuxLines.map((line) => (
+                                        <li key={`inflation-aux-${line}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
+                                          {line}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
                           {policyRow && (
