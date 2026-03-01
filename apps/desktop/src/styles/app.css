@@ -784,6 +784,56 @@ button:focus-visible:not(.btn) {
   line-height: 1.35;
 }
 
+.section-health-list {
+  gap: 8px;
+}
+
+.section-health-row {
+  border: 1px solid var(--fx-color-surface-border);
+  border-radius: 10px;
+  background: var(--fx-color-surface-ops-inset);
+  padding: 8px 10px;
+}
+
+.section-health-body {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 5px;
+}
+
+.section-health-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.section-health-name {
+  color: var(--fx-color-text-primary);
+  letter-spacing: 0.01em;
+}
+
+.section-health-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--fx-color-surface-border-strong);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--fx-color-text-ops-value);
+  background: linear-gradient(180deg, var(--fx-color-surface-alt) 0%, var(--fx-color-surface-base) 100%);
+}
+
+.section-health-detail {
+  margin: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .ops-list-chip {
   display: inline-flex;
   align-items: center;
@@ -1232,6 +1282,12 @@ button:focus-visible:not(.btn) {
 @media (max-width: 900px) {
   .ops-timeline-row {
     grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .section-health-main {
+    align-items: flex-start;
+    flex-direction: column;
     gap: 6px;
   }
 

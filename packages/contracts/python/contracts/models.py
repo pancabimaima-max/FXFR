@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Generic, Literal, TypeVar
@@ -42,6 +42,7 @@ class ChecklistSection(BaseModel):
     name: str
     state: Literal["ready", "warn", "error"]
     score: float
+    max_score: float | None = None
     detail: str
 
 

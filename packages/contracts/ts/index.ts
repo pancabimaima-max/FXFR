@@ -1,4 +1,4 @@
-﻿export const SCHEMA_VERSION = "1.0.0" as const;
+export const SCHEMA_VERSION = "1.0.0" as const;
 
 export type ReadinessState = "ready" | "warn" | "error";
 
@@ -25,6 +25,7 @@ export interface ChecklistSection {
   name: string;
   state: ReadinessState;
   score: number;
+  max_score?: number;
   detail: string;
 }
 

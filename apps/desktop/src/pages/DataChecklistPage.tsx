@@ -295,6 +295,22 @@ function formatAuxValue(value: unknown): string {
   return "";
 }
 
+const sectionMaxScoreFallback: Record<string, number> = {
+  "H1 Candle Data": 40,
+  "Economic Calendar Data": 25,
+  "FRED Data": 25,
+  "Time Conversion": 10,
+};
+
+function formatSectionScoreValue(value: unknown): string {
+  const asNum = Number(value);
+  if (!Number.isFinite(asNum)) return "0";
+  if (Math.abs(asNum - Math.round(asNum)) < 0.001) {
+    return String(Math.round(asNum));
+  }
+  return asNum.toFixed(1);
+}
+
 export function DataChecklistPage({ sessionToken }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [loading, setLoading] = useState(true);
@@ -889,6 +905,24 @@ export function DataChecklistPage({ sessionToken }: Props) {
     : (overview?.overall_state ?? "n/a");
   const overallScoreRaw = Number(overview?.total_score);
   const overallScorePct = Number.isFinite(overallScoreRaw) ? Math.max(0, Math.min(100, Math.round(overallScoreRaw))) : 0;
+  const sectionHealthRows = useMemo(
+    () =>
+      (Array.isArray(overview?.sections) ? overview.sections : []).map((section: Record<string, unknown>) => {
+        const name = String(section?.name ?? "").trim();
+        const score = Number(section?.score ?? 0);
+        const fromApiMax = Number(section?.max_score);
+        const fallbackMax = sectionMaxScoreFallback[name] ?? 0;
+        const maxScore = Number.isFinite(fromApiMax) && fromApiMax > 0 ? fromApiMax : fallbackMax;
+        return {
+          name,
+          state: String(section?.state ?? "warn"),
+          score: Number.isFinite(score) ? score : 0,
+          maxScore,
+          detail: String(section?.detail ?? ""),
+        };
+      }),
+    [overview?.sections],
+  );
   const normalizedPolicyRows = useMemo(() => fredPolicyRows.map(normalizeFredRow), [fredPolicyRows]);
   const normalizedInflRows = useMemo(
     () =>
@@ -1058,13 +1092,19 @@ export function DataChecklistPage({ sessionToken }: Props) {
             </div>
             <div className="panel ops-card overview-kpi-card">
               <h2 className="ops-card-title">Section Health</h2>
-              <ul className="ops-list">
-                {(overview?.sections ?? []).map((s: any) => (
-                  <li key={s.name} className="ops-list-row">
-                    <span className={`ops-list-chip ${String(s?.state ?? "warn").toLowerCase()}`}>{String(s?.state ?? "n/a")}</span>
-                    <span>
-                      <strong>{s.name}</strong> ({s.score}) - {s.detail}
-                    </span>
+              <ul className="ops-list section-health-list">
+                {sectionHealthRows.map((section) => (
+                  <li key={section.name} className="ops-list-row section-health-row">
+                    <span className={`ops-list-chip ${section.state.toLowerCase()}`}>{section.state}</span>
+                    <div className="section-health-body">
+                      <div className="section-health-main">
+                        <strong className="section-health-name">{section.name}</strong>
+                        <span className="section-health-score">
+                          {formatSectionScoreValue(section.score)}/{formatSectionScoreValue(section.maxScore)}
+                        </span>
+                      </div>
+                      <p className="muted section-health-detail">{section.detail}</p>
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -14,6 +14,7 @@ from app.core.constants import (
     PRICE_READY_HOURS,
     PRICE_WARN_HOURS,
 )
+from app.core.v1_decisions import CHECKLIST_SCORE_WEIGHTS
 from app.services.autofetch_service import compute_schedule_snapshot
 from app.services.metrics_service import age_hours_from_iso
 
@@ -182,6 +183,10 @@ def build_checklist_overview(
     sections: list[dict] = []
     timeline: list[dict] = []
     now_utc = datetime.now(timezone.utc)
+    price_weight = float(CHECKLIST_SCORE_WEIGHTS["price"])
+    calendar_weight = float(CHECKLIST_SCORE_WEIGHTS["calendar"])
+    macro_weight = float(CHECKLIST_SCORE_WEIGHTS["macro"])
+    timezone_weight = float(CHECKLIST_SCORE_WEIGHTS["timezone"])
 
     price_age = age_hours_from_iso(str((price_meta or {}).get("max_time_utc", "")))
     price_state = "error"
@@ -211,7 +216,15 @@ def build_checklist_overview(
                 "age_text": _fmt_age(price_age),
             }
         )
-    sections.append({"name": "H1 Candle Data", "state": price_state, "score": 40.0 * _state_factor(price_state), "detail": price_detail})
+    sections.append(
+        {
+            "name": "H1 Candle Data",
+            "state": price_state,
+            "score": price_weight * _state_factor(price_state),
+            "max_score": price_weight,
+            "detail": price_detail,
+        }
+    )
 
     cal_age = age_hours_from_iso(str((calendar_meta or {}).get("loaded_at_utc", "")))
     cal_state = _state_from_age(cal_age, CAL_READY_HOURS, CAL_WARN_HOURS) if calendar_meta else "error"
@@ -227,7 +240,15 @@ def build_checklist_overview(
                 "age_text": _fmt_age(cal_age),
             }
         )
-    sections.append({"name": "Economic Calendar Data", "state": cal_state, "score": 25.0 * _state_factor(cal_state), "detail": cal_detail})
+    sections.append(
+        {
+            "name": "Economic Calendar Data",
+            "state": cal_state,
+            "score": calendar_weight * _state_factor(cal_state),
+            "max_score": calendar_weight,
+            "detail": cal_detail,
+        }
+    )
 
     macro_state = "error"
     macro_detail = "Disabled (missing FRED key)." if not macro_enabled else "No valid macro observations."
@@ -262,11 +283,27 @@ def build_checklist_overview(
                         "age_text": _fmt_age(freshest_age),
                     }
                 )
-    sections.append({"name": "FRED Data", "state": macro_state, "score": 25.0 * _state_factor(macro_state), "detail": macro_detail})
+    sections.append(
+        {
+            "name": "FRED Data",
+            "state": macro_state,
+            "score": macro_weight * _state_factor(macro_state),
+            "max_score": macro_weight,
+            "detail": macro_detail,
+        }
+    )
 
     tz_state = "ready"
     tz_detail = "Applied timezone settings are in sync."
-    sections.append({"name": "Time Conversion", "state": tz_state, "score": 10.0 * _state_factor(tz_state), "detail": tz_detail})
+    sections.append(
+        {
+            "name": "Time Conversion",
+            "state": tz_state,
+            "score": timezone_weight * _state_factor(tz_state),
+            "max_score": timezone_weight,
+            "detail": tz_detail,
+        }
+    )
 
     auto_cfg = dict(auto_fetch_config or {})
     interval_hours = max(1, int(auto_cfg.get("interval_hours", 1)))
