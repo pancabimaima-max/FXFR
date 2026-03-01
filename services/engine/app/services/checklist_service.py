@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pandas as pd
@@ -121,12 +121,49 @@ def _market_session_snapshot(ui_timezone: str) -> dict[str, Any]:
         if is_active:
             active.append(name)
 
+    market_closed = _is_fx_market_closed(now_utc)
+
+    # Market reopens at Sunday 22:00 UTC after the weekend close window.
+    closed_until_utc_dt: datetime | None = None
+    weekday = now_utc.weekday()  # Monday=0 ... Sunday=6
+    if market_closed:
+        if weekday == 4 and hour_utc >= 22:
+            days_until_sunday = 6 - weekday
+            closed_until_utc_dt = (now_utc + timedelta(days=days_until_sunday)).replace(
+                hour=22, minute=0, second=0, microsecond=0
+            )
+        elif weekday == 5:
+            days_until_sunday = 6 - weekday
+            closed_until_utc_dt = (now_utc + timedelta(days=days_until_sunday)).replace(
+                hour=22, minute=0, second=0, microsecond=0
+            )
+        elif weekday == 6 and hour_utc < 22:
+            closed_until_utc_dt = now_utc.replace(hour=22, minute=0, second=0, microsecond=0)
+
+    closed_until_local_dt = closed_until_utc_dt.astimezone(tz_obj) if closed_until_utc_dt is not None else None
+    status_text = "Open"
+    if market_closed:
+        if closed_until_local_dt is not None:
+            status_text = (
+                "Closed until "
+                f"{closed_until_local_dt.strftime('%a %Y-%m-%d %H:%M')} "
+                f"({str(getattr(tz_obj, 'zone', 'UTC'))})"
+            )
+        else:
+            status_text = "Closed"
+
     return {
         "local_time": now_local.strftime("%Y-%m-%d %H:%M"),
         "utc_time": now_utc.strftime("%Y-%m-%d %H:%M"),
         "timezone": str(getattr(tz_obj, "zone", "UTC")),
+        "weekday": now_local.strftime("%A"),
+        "local_clock_display": f"{now_local.strftime('%A')} {now_local.strftime('%Y-%m-%d %H:%M')}",
         "active_sessions": active,
         "label": " / ".join(active) if active else "No major session overlap",
+        "market_status": "closed" if market_closed else "open",
+        "status_text": status_text,
+        "closed_until_utc": closed_until_utc_dt.strftime("%Y-%m-%d %H:%M") if closed_until_utc_dt is not None else "",
+        "closed_until_local": closed_until_local_dt.strftime("%Y-%m-%d %H:%M") if closed_until_local_dt is not None else "",
     }
 
 

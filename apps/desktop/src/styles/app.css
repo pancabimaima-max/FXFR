@@ -67,6 +67,7 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
   border: 1px solid var(--fx-color-shell-topbar-border);
   border-radius: 8px;
   padding: 7px 10px;
@@ -141,6 +142,8 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   flex: 0 0 auto;
   min-width: 0;
 }
@@ -155,6 +158,7 @@ a {
   letter-spacing: 0.02em;
   color: var(--fx-color-text-secondary);
   background: linear-gradient(180deg, #262c36 0%, #1e242e 100%);
+  white-space: nowrap;
 }
 
 .top-rail-chip.live {

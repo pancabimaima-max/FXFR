@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { fetchBootstrap } from "@/api/client";
+import { fetchBootstrap, fetchChecklist } from "@/api/client";
 import { TopCommandBar } from "@/components/TopCommandBar";
 import { ChartsPage } from "@/pages/ChartsPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -134,6 +134,7 @@ export function App() {
   const [error, setError] = useState("");
   const [diagnostic, setDiagnostic] = useState("");
   const [sidecarInfo, setSidecarInfo] = useState<EngineRuntimeInfo | null>(null);
+  const [topBarMarketSession, setTopBarMarketSession] = useState<Record<string, unknown> | null>(null);
   const engineUrl = sidecarInfo?.engine_url ?? (import.meta.env.VITE_ENGINE_URL ?? "http://127.0.0.1:8765");
 
   useEffect(() => {
@@ -224,6 +225,45 @@ export function App() {
     }
   }, [activePair]);
 
+  useEffect(() => {
+    if (!bootstrap?.sessionToken) {
+      setTopBarMarketSession(null);
+      return;
+    }
+
+    let cancelled = false;
+    const pollIntervalMs = 30_000;
+    const sessionToken = bootstrap.sessionToken;
+
+    const pollMarketSession = async () => {
+      try {
+        const response = await fetchChecklist(sessionToken, activePair);
+        const payload = response?.data;
+        const marketSession =
+          payload && typeof payload === "object" && payload.market_session && typeof payload.market_session === "object"
+            ? (payload.market_session as Record<string, unknown>)
+            : null;
+        if (!cancelled) {
+          setTopBarMarketSession(marketSession);
+        }
+      } catch {
+        if (!cancelled) {
+          setTopBarMarketSession((prev) => prev);
+        }
+      }
+    };
+
+    void pollMarketSession();
+    const intervalId = window.setInterval(() => {
+      void pollMarketSession();
+    }, pollIntervalMs);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [bootstrap?.sessionToken, activePair]);
+
   if (loading) {
     return <div className="screen-center">Bootstrapping desktop runtime...</div>;
   }
@@ -263,7 +303,7 @@ export function App() {
   return (
     <main className="app-root">
       <section className="content">
-        <TopCommandBar activePage={activePage} onNavigate={setActivePage} />
+        <TopCommandBar activePage={activePage} onNavigate={setActivePage} marketSession={topBarMarketSession} />
         {!bootstrap.macroEnabled && (
           <div className="warning-banner runtime-warning-banner">Macro module disabled: {bootstrap.macroDisabledReason}</div>
         )}

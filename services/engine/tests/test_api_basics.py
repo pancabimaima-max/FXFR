@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import tempfile
@@ -172,6 +172,13 @@ class EngineApiBasicTests(unittest.TestCase):
                 self.assertIn("freshness_timeline", data)
                 self.assertIn("market_session", data)
                 self.assertIn("auto_fetch_status", data)
+                market_session = data["market_session"]
+                self.assertIn("weekday", market_session)
+                self.assertIn("local_clock_display", market_session)
+                self.assertIn("market_status", market_session)
+                self.assertIn("status_text", market_session)
+                self.assertIn("closed_until_utc", market_session)
+                self.assertIn("closed_until_local", market_session)
 
     def test_autofetch_apply_sync_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:

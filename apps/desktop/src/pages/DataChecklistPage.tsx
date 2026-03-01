@@ -124,13 +124,6 @@ function statusLabel(status: JobStatus): string {
   return status;
 }
 
-function formatClock(value: string): string {
-  if (!value) return "n/a";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleTimeString([], { hour12: false });
-}
-
 function formatDateTime(value: string): string {
   if (!value) return "n/a";
   const dt = new Date(value);
@@ -321,11 +314,9 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const [successText, setSuccessText] = useState("");
   const [reloadSeed, setReloadSeed] = useState(0);
   const [eventStreamState, setEventStreamState] = useState<EngineStreamState>("connecting");
-  const [lastEventAt, setLastEventAt] = useState("");
   const handledTerminalJobsRef = useRef<Set<string>>(new Set());
   const lastEngineEventAtMsRef = useRef<number>(Date.now());
 
-  const bootstrap = useAppStore((s) => s.bootstrap);
   const setBootstrap = useAppStore((s) => s.setBootstrap);
   const activePair = useAppStore((s) => s.activePair);
 
@@ -372,7 +363,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
   }, []);
 
   const handleEngineEvent = useCallback((event: WsEvent) => {
-    setLastEventAt(String(event.timestamp_utc ?? ""));
     lastEngineEventAtMsRef.current = Date.now();
 
     const payload = (event.payload ?? {}) as Record<string, unknown>;
@@ -946,14 +936,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
         ))}
       </div>
 
-      <div className="events-status-row">
-        <span className={`events-indicator ${eventStreamState}`}>Events: {eventStreamState}</span>
-        <span className={`checklist-macro-chip status-chip ${bootstrap?.macroEnabled ? "status-chip-live" : "status-chip-muted"}`}>
-          Macro: {bootstrap?.macroEnabled ? "Live" : "Disabled"}
-        </span>
-        <span className="muted">Last event: {formatClock(lastEventAt)}</span>
-      </div>
-
       {activeJob && (
         <div className="panel job-panel ops-card ops-job-card">
           <div className="card-header">
@@ -1031,8 +1013,6 @@ export function DataChecklistPage({ sessionToken }: Props) {
                 <p className="muted overview-kpi-caption">Section health score</p>
               </div>
               <p className="muted overview-kpi-caption">Total score: {overview?.total_score ?? "n/a"}</p>
-              <p className="muted overview-kpi-caption">Local clock: {overview?.market_session?.local_time ?? "n/a"}</p>
-              <p className="muted overview-kpi-caption">Market session: {overview?.market_session?.label ?? "n/a"}</p>
             </div>
             <div className="panel ops-card overview-kpi-card">
               <h2 className="ops-card-title">Section Health</h2>
