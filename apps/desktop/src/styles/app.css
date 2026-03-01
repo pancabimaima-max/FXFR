@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -105,7 +105,7 @@ a {
 .top-nav-tab,
 .top-primary-tab {
   border: 1px solid var(--fx-color-surface-border);
-  background: linear-gradient(180deg, #252a33 0%, #1c2129 100%);
+  background: linear-gradient(180deg, var(--fx-color-surface-control-ghost) 0%, var(--fx-color-surface-control-field) 100%);
   color: var(--fx-color-text-secondary);
   border-radius: 6px;
   padding: 6px 11px;
@@ -127,14 +127,14 @@ a {
   transform: translateY(-1px);
   border-color: var(--fx-color-accent-secondary);
   color: var(--fx-color-text-primary);
-  background: linear-gradient(180deg, #2d3340 0%, #232a34 100%);
+  background: linear-gradient(180deg, var(--fx-color-surface-control-field-hover) 0%, var(--fx-color-surface-control-ghost) 100%);
 }
 
 .top-nav-tab.active,
 .top-primary-tab.active {
   color: var(--fx-color-text-tab-active);
   border-color: var(--fx-color-accent-secondary);
-  background: linear-gradient(180deg, #323946 0%, #2a313c 100%);
+  background: linear-gradient(180deg, var(--fx-color-surface-tab-active) 0%, var(--fx-color-surface-tab-idle) 100%);
   box-shadow: var(--fx-effect-glow-tab-active);
 }
 
@@ -157,7 +157,7 @@ a {
   font-size: 0.69rem;
   letter-spacing: 0.02em;
   color: var(--fx-color-text-secondary);
-  background: linear-gradient(180deg, #262c36 0%, #1e242e 100%);
+  background: linear-gradient(180deg, var(--fx-color-surface-control-ghost) 0%, var(--fx-color-surface-control-field) 100%);
   white-space: nowrap;
 }
 
@@ -1682,8 +1682,8 @@ select.control-field {
 
 /* Ensure native select dropdown options stay readable on Windows light popups. */
 select.control-field option {
-  color: #111;
-  background: #f3f3f3;
+  color: #111827;
+  background: #ffffff;
 }
 
 input.control-field:hover,

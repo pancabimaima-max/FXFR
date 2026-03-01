@@ -297,86 +297,23 @@ function formatAuxValue(value: unknown): string {
   return "";
 }
 
-function toGaugePercent(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return 0;
-  if (max <= min) return 0;
-  const pct = ((value - min) / (max - min)) * 100;
-  return Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 0));
-}
-
-function toGaugeArcDegrees(percent: number, minDeg = 5, maxDeg = 15): number {
-  const normalized = Math.max(0, Math.min(100, percent));
-  return minDeg + ((maxDeg - minDeg) * normalized) / 100;
-}
-
 function toIsoMillis(value: string): number | null {
   if (!value) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function sparklinePath(values: number[], width = 150, height = 32): string {
-  if (values.length === 0) return "";
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  return values
-    .map((point, idx) => {
-      const x = (idx / Math.max(values.length - 1, 1)) * width;
-      const y = height - ((point - min) / range) * height;
-      return `${idx === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-}
-
-function buildInflationSparkline(aux: unknown, fallbackValue: number): number[] {
-  const auxObj = (aux ?? {}) as Record<string, unknown>;
-  const observations = toObservationsArray(auxObj.observations).slice(-12);
-  if (observations.length >= 2) return observations;
-  if (!Number.isFinite(fallbackValue)) return [];
-  return [
-    fallbackValue * 0.97,
-    fallbackValue * 0.98,
-    fallbackValue * 0.99,
-    fallbackValue,
-    fallbackValue * 1.01,
-    fallbackValue * 1.015,
-  ];
-}
-
-function buildPolicySparkline(value: number, aux: unknown): number[] {
-  if (!Number.isFinite(value)) return [];
-  const trend = String(((aux ?? {}) as Record<string, unknown>).trend ?? "").toLowerCase();
-  if (trend === "rising") {
-    return [value - 0.3, value - 0.2, value - 0.1, value, value + 0.05, value + 0.08];
-  }
-  if (trend === "falling") {
-    return [value + 0.3, value + 0.2, value + 0.1, value, value - 0.04, value - 0.08];
-  }
-  return [value - 0.03, value + 0.02, value - 0.02, value + 0.01, value, value + 0.01];
-}
-
-function sparklineStrokeByTrend(trendToken: string): string {
-  if (trendToken === "falling") return "#ef4444";
-  return "#22c55e";
-}
-
-function sparklineStrokeByMomentum(value: number | null): string {
-  if (value !== null && value < 0) return "#ef4444";
-  return "#22c55e";
-}
-
 function fredDeltaPillClass(value: number | null): string {
-  if (value !== null && value > 2) return "border-emerald-400/50 bg-emerald-500/10 text-emerald-300";
-  if (value !== null && value < 1) return "border-red-400/50 bg-red-500/10 text-red-300";
-  return "border-zinc-700/80 bg-zinc-900/80 text-zinc-200";
+  if (value !== null && value > 0) return "border-emerald-300 bg-emerald-50 text-emerald-700";
+  if (value !== null && value < 0) return "border-red-300 bg-red-50 text-red-700";
+  return "border-slate-300 bg-slate-50 text-slate-600";
 }
 
 function fredStatusBadgeClass(status: string): string {
   const token = status.trim().toLowerCase();
-  if (token === "ok") return "border-[#e30613]/70 bg-[#e30613]/15 text-[#ff7d85]";
-  if (token === "error") return "border-zinc-600/70 bg-zinc-900 text-zinc-200";
-  return "border-zinc-700/80 bg-zinc-900 text-zinc-300";
+  if (token === "ok" || token === "ready" || token === "completed") return "border-emerald-300 bg-emerald-50 text-emerald-700";
+  if (token === "error" || token === "failed") return "border-red-300 bg-red-50 text-red-700";
+  return "border-amber-300 bg-amber-50 text-amber-700";
 }
 
 function resolveMarketSessionLabel(date: Date): string {
@@ -456,6 +393,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
   const handledTerminalJobsRef = useRef<Set<string>>(new Set());
   const lastEngineEventAtMsRef = useRef<number>(Date.now());
 
+  const bootstrap = useAppStore((s) => s.bootstrap);
   const setBootstrap = useAppStore((s) => s.setBootstrap);
   const activePair = useAppStore((s) => s.activePair);
 
@@ -1033,6 +971,19 @@ export function DataChecklistPage({ sessionToken }: Props) {
       }),
     [fredInflRows],
   );
+  const mergedFredCards = useMemo(() => {
+    const policyByCurrency = new Map(normalizedPolicyRows.map((row) => [row.currency, row] as const));
+    const inflationByCurrency = new Map(normalizedInflRows.map((row) => [row.currency, row] as const));
+    const currencies = Array.from(new Set([...policyByCurrency.keys(), ...inflationByCurrency.keys()]))
+      .filter((token) => token.length > 0)
+      .sort((a, b) => a.localeCompare(b));
+    return currencies.map((currency) => ({
+      currency,
+      country: currencyToCountryLabel[currency] ?? currency,
+      policy: policyByCurrency.get(currency) ?? null,
+      inflation: inflationByCurrency.get(currency) ?? null,
+    }));
+  }, [normalizedPolicyRows, normalizedInflRows]);
   const normalizedCalendarRows = useMemo(
     () =>
       calendarPreviewRows.map((row) => {
@@ -1209,7 +1160,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
             <div className="panel ops-card overview-kpi-card">
               <h2 className="ops-card-title">Section Health</h2>
               <ul className="ops-list section-health-list">
-                {sectionHealthRows.map((section) => (
+                {sectionHealthRows.map((section: { name: string; state: string; score: number; maxScore: number; detail: string }) => (
                   <li key={section.name} className="ops-list-row section-health-row">
                     <span className={`ops-list-chip ${section.state.toLowerCase()}`}>{section.state}</span>
                     <div className="section-health-body">
@@ -1425,41 +1376,40 @@ export function DataChecklistPage({ sessionToken }: Props) {
 
       {!loading && !error && activeTab === "FRED Data" && (
         <>
-          {/* AMD-style FRED command center header and controls */}
           <section
-            className={`rounded-xl border border-zinc-800 bg-[#0a0a0a] p-6 [font-family:Inter,system-ui,sans-serif] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] ${
-              fredDataFresh ? "shadow-[0_0_18px_rgba(227,6,19,0.14),inset_0_1px_0_rgba(255,255,255,0.04)]" : ""
+            className={`rounded-2xl border border-slate-200 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6 shadow-sm ${
+              fredDataFresh ? "ring-1 ring-blue-200" : ""
             }`}
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold tracking-wide text-zinc-100">FRED Data</h2>
-                <p className="mt-1 text-sm text-zinc-400">Policy and Inflation source tables with per-series status/error rows.</p>
+                <h2 className="text-2xl font-bold text-slate-900">FRED Data</h2>
+                <p className="mt-1 text-sm text-slate-600">Policy and inflation source tables with per-series status and detail rows.</p>
               </div>
               <div className="flex flex-wrap justify-end gap-2 text-xs">
-                <span className="rounded-full border border-zinc-700 bg-zinc-900/90 px-3 py-1 text-zinc-300">Local Clock: {localClockText}</span>
-                <span className="rounded-full border border-zinc-700 bg-zinc-900/90 px-3 py-1 text-zinc-300">Market Session: {marketSessionText}</span>
-                <span className="rounded-full border border-zinc-700 bg-zinc-900/90 px-3 py-1 text-zinc-300">
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">Local Clock: {localClockText}</span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">Market Session: {marketSessionText}</span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
                   Last Refresh: {latestFredRefreshMs ? new Date(latestFredRefreshMs).toLocaleString([], { hour12: false }) : "n/a"}
                 </span>
               </div>
             </div>
             <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(280px,420px)_auto]">
               <label className="space-y-2">
-                <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400">FRED API Key (optional overwrite)</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">FRED API key (optional overwrite)</span>
                 <input
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-[#e30613] focus:shadow-[0_0_0_1px_rgba(227,6,19,0.25)]"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:shadow-[0_0_0_1px_rgba(59,130,246,0.2)]"
                   id="fred-key-inline"
                   type="password"
                   value={fredApiKey}
                   onChange={(e) => setFredApiKey(e.target.value)}
-                  placeholder={runtimeConfig?.fred_key_configured ? "Configured. Enter new key to overwrite." : "Enter key to enable macro module"}
+                  placeholder={runtimeConfig?.fred_key_configured ? "Configured. Enter new key to overwrite." : "Configure key to enable macro module"}
                 />
               </label>
               <div className="flex items-end justify-start lg:justify-end">
                 <button
                   type="button"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-red-500 bg-[#e30613] px-6 text-sm font-semibold tracking-wide text-white transition hover:bg-[#ff0f1d] hover:shadow-[0_0_18px_rgba(227,6,19,0.55)] disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-400"
+                  className="inline-flex min-h-[42px] items-center justify-center rounded-lg border border-blue-700 bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-700 hover:shadow-md disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500"
                   disabled={longJobActive || busyAction === "fred-refresh"}
                   onClick={() => void refreshFred()}
                 >
@@ -1469,230 +1419,168 @@ export function DataChecklistPage({ sessionToken }: Props) {
             </div>
           </section>
 
-          {/* AMD-style dual-column metrics layout (Policy | Inflation) */}
-          <section className="mt-4 grid gap-4 xl:grid-cols-2">
-            {/* Policy cards with manual override controls */}
-            <div className="rounded-xl border border-zinc-800 bg-[#0a0a0a] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-zinc-200">Policy</h3>
-              {normalizedPolicyRows.length === 0 ? (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-4 text-sm text-zinc-400">
-                  No policy snapshot rows.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {normalizedPolicyRows.map((row) => {
-                    const overrideValue = policyManualOverrides[row.currency];
-                    const hasManualOverride = Number.isFinite(overrideValue);
-                    const valueNumber = Number(hasManualOverride ? overrideValue : row.value);
-                    const displayValue = toDisplayNumber(hasManualOverride ? overrideValue : row.value, 2);
-                    const cardKey = `policy-${row.currency}-${row.seriesId}`;
-                    const cardExpanded = Boolean(fredExpandedCards[cardKey]);
-                    const auxObj = (row.aux ?? {}) as Record<string, unknown>;
-                    const trendToken = String(auxObj.trend ?? "").trim().toLowerCase();
-                    const sparklineValues = buildPolicySparkline(valueNumber, row.aux);
-                    const gaugePct = toGaugePercent(valueNumber, -1, 10);
-                    const gaugeArc = toGaugeArcDegrees(gaugePct);
-                    const gaugeStyle: CSSProperties = {
-                      background: `conic-gradient(#e30613 0deg ${gaugeArc}deg, rgba(255,255,255,0.18) ${gaugeArc}deg 360deg)`,
-                    };
-                    return (
-                      <article
-                        key={`${row.currency}-${row.seriesId}-${row.refreshedAtUtc}`}
-                        className="rounded-xl border border-zinc-800 bg-[#101010] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]"
-                      >
-                        <div className="flex items-start justify-between gap-3">
+          <section className="mt-4">
+            {mergedFredCards.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-sm text-slate-500 shadow-sm">
+                No FRED snapshot rows available.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {mergedFredCards.map((card) => {
+                  const policyRow = card.policy;
+                  const inflationRow = card.inflation;
+                  const cardKey = `fred-${card.currency}`;
+                  const cardExpanded = Boolean(fredExpandedCards[cardKey]);
+                  const overrideValue = policyManualOverrides[card.currency];
+                  const hasManualOverride = Number.isFinite(overrideValue);
+                  const policyValue = hasManualOverride ? overrideValue : policyRow?.value;
+                  const policyDisplay = toDisplayNumber(policyValue, 2);
+                  const policyAux = (policyRow?.aux ?? {}) as Record<string, unknown>;
+                  const policyTrendToken = String(policyAux.trend ?? "").trim().toLowerCase();
+                  const policyDelta = policyTrendToken === "rising" ? 0.25 : policyTrendToken === "falling" ? -0.25 : 0;
+                  const policyDeltaClass = policyDelta > 0
+                    ? "text-emerald-600"
+                    : policyDelta < 0
+                      ? "text-red-600"
+                      : "text-slate-500";
+                  const inflationDelta = inflationRow?.yoy ?? inflationRow?.mom ?? null;
+                  const inflationDeltaClass = inflationDelta !== null && inflationDelta > 0
+                    ? "text-emerald-600"
+                    : inflationDelta !== null && inflationDelta < 0
+                      ? "text-red-600"
+                      : "text-slate-500";
+                  const policyRefreshedMs = toIsoMillis(policyRow?.refreshedAtUtc ?? "") ?? 0;
+                  const inflationRefreshedMs = toIsoMillis(inflationRow?.refreshedAtUtc ?? "") ?? 0;
+                  const updatedMs = Math.max(policyRefreshedMs, inflationRefreshedMs);
+                  const hasError = String(policyRow?.status ?? "").toLowerCase() === "error" || String(inflationRow?.status ?? "").toLowerCase() === "error";
+                  const statusLabelText = hasError
+                    ? "error"
+                    : String(policyRow?.status || inflationRow?.status || "n/a");
+
+                  return (
+                    <article key={card.currency} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md">
+                      <div className="p-5">
+                        <div className="mb-4 flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-lg">
-                              {currencyToEmoji[row.currency] ?? "🏳️"}
-                            </span>
+                            <span className="text-4xl">{currencyToEmoji[card.currency] ?? "🏳️"}</span>
                             <div>
-                              <p className="text-sm font-semibold text-zinc-100">{row.currency || "N/A"}</p>
-                              <p className="font-mono text-[11px] text-zinc-400">{row.seriesId || ""}</p>
+                              <h3 className="font-semibold text-slate-900">{card.currency || "N/A"}</h3>
+                              <p className="text-sm text-slate-500">{card.country}</p>
                             </div>
                           </div>
-                          <span className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${fredStatusBadgeClass(row.status)}`}>
-                            {row.status || "n/a"}
+                          <span className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${fredStatusBadgeClass(statusLabelText)}`}>
+                            {statusLabelText}
                           </span>
                         </div>
-                        <div className="mt-5 grid grid-cols-[120px_1fr] items-center gap-4">
-                          <div className="relative h-28 w-28 rounded-full p-[3px] [transform:rotate(-90deg)]" style={gaugeStyle}>
-                            <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#0f0f0f]">
-                              <span className="text-4xl font-semibold leading-none text-zinc-100 [transform:rotate(90deg)]">{displayValue || "—"}</span>
-                              <span className="mt-1 text-[10px] uppercase tracking-[0.12em] text-zinc-500 [transform:rotate(90deg)]">Value</span>
+
+                        <div className="mb-3 grid grid-cols-2 gap-3">
+                          <div className="rounded-lg bg-blue-50 p-4">
+                            <p className="mb-1 text-xs text-slate-600">Interest Rate</p>
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl font-bold text-blue-700">{policyDisplay || "—"}%</span>
+                              <span className={`text-sm font-semibold ${policyDeltaClass}`}>
+                                {policyDelta > 0 ? "+" : policyDelta < 0 ? "-" : ""}
+                                {Math.abs(policyDelta).toFixed(2)}%
+                              </span>
                             </div>
                           </div>
-                          <div className="min-w-0">
-                            <div className="mb-2 flex items-center justify-start">
-                              <svg viewBox="0 0 60 18" className="h-[18px] w-[60px]">
-                                <path d={sparklinePath(sparklineValues, 60, 18)} fill="none" stroke={sparklineStrokeByTrend(trendToken)} strokeWidth="1.5" strokeLinecap="round" />
-                              </svg>
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-xs">
-                              <span className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 font-medium text-zinc-300">
-                                Trend: {String(auxObj.trend ?? "n/a")}
+                          <div className="rounded-lg bg-purple-50 p-4">
+                            <p className="mb-1 text-xs text-slate-600">Inflation Rate</p>
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl font-bold text-purple-700">{toDisplayNumber(inflationRow?.value, 2) || "—"}%</span>
+                              <span className={`text-sm font-semibold ${inflationDeltaClass}`}>
+                                {inflationDelta !== null ? `${inflationDelta > 0 ? "+" : ""}${inflationDelta.toFixed(1)}%` : "0%"}
                               </span>
-                              {hasManualOverride && (
-                                <span className="rounded-md border border-emerald-400/50 bg-emerald-500/10 px-2 py-1 font-bold text-emerald-300">
-                                  {displayValue} (manual)
-                                </span>
-                              )}
                             </div>
                           </div>
                         </div>
 
-                        {/* Expandable details block for full row metadata */}
-                        <div className="mt-3">
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-400 hover:text-zinc-100"
-                            onClick={() => toggleFredDetails(cardKey)}
+                        <p className="text-xs text-slate-400">
+                          Updated: {updatedMs > 0 ? new Date(updatedMs).toLocaleDateString() : "n/a"}
+                        </p>
+
+                        <button
+                          type="button"
+                          className="mt-3 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-800"
+                          onClick={() => toggleFredDetails(cardKey)}
+                        >
+                          <svg
+                            viewBox="0 0 20 20"
+                            className={`h-4 w-4 transition-transform ${cardExpanded ? "rotate-90" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
                           >
-                            <svg
-                              viewBox="0 0 20 20"
-                              className={`h-4 w-4 transition-transform ${cardExpanded ? "rotate-90" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                            >
-                              <path d="M7 5L13 10L7 15" />
-                            </svg>
-                            Details
-                          </button>
-                          {cardExpanded && (
-                            <div className="mt-2 grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-300">
-                              <p><span className="text-zinc-500">AS_OF_UTC:</span> {row.asOfUtc || "—"}</p>
-                              <p><span className="text-zinc-500">ERROR_MESSAGE:</span> {row.errorMessage || "—"}</p>
-                              <p><span className="text-zinc-500">CENTRAL_BANK:</span> {String(auxObj.central_bank ?? "—")}</p>
-                              <p><span className="text-zinc-500">AUX:</span> {formatAuxValue(row.aux) || "—"}</p>
-                              <p><span className="text-zinc-500">OFFICIAL_NOTE:</span> {policyOfficialNotes[row.currency] ?? "—"}</p>
-                              <p><span className="text-zinc-500">REFRESHED_AT_UTC:</span> {row.refreshedAtUtc || "—"}</p>
-                              <div className="mt-1 border-t border-zinc-800 pt-2">
-                                <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">Manual Override</p>
-                                <div className="inline-flex items-center gap-2">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="—"
-                                    className="w-28 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none transition focus:border-[#e30613]"
-                                    value={hasManualOverride ? String(overrideValue) : ""}
-                                    onChange={(e) => updatePolicyOverride(row.currency, e.target.value)}
-                                  />
-                                  {hasManualOverride && (
-                                    <button
-                                      type="button"
-                                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-[#e30613] hover:text-red-300"
-                                      onClick={() => clearPolicyOverride(row.currency)}
-                                      aria-label={`Clear override for ${row.currency}`}
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </div>
+                            <path d="M7 5L13 10L7 15" />
+                          </svg>
+                          Details
+                        </button>
+                      </div>
+
+                      {cardExpanded && (
+                        <div className="border-t border-slate-200 bg-slate-50 p-5 text-xs text-slate-700">
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="grid gap-1">
+                              <p className="font-semibold text-slate-900">Policy</p>
+                              <p><span className="text-slate-500">SERIES_ID:</span> {policyRow?.seriesId || "—"}</p>
+                              <p><span className="text-slate-500">AS_OF_UTC:</span> {policyRow?.asOfUtc || "—"}</p>
+                              <p><span className="text-slate-500">ERROR_MESSAGE:</span> {policyRow?.errorMessage || "—"}</p>
+                              <p><span className="text-slate-500">AUX:</span> {formatAuxValue(policyRow?.aux) || "—"}</p>
+                              <p><span className="text-slate-500">OFFICIAL_NOTE:</span> {policyOfficialNotes[card.currency] ?? "—"}</p>
+                              <p><span className="text-slate-500">REFRESHED_AT_UTC:</span> {policyRow?.refreshedAtUtc || "—"}</p>
+                            </div>
+                            <div className="grid gap-1">
+                              <p className="font-semibold text-slate-900">Inflation</p>
+                              <p><span className="text-slate-500">SERIES_ID:</span> {inflationRow?.seriesId || "—"}</p>
+                              <p><span className="text-slate-500">AS_OF_UTC:</span> {inflationRow?.asOfUtc || "—"}</p>
+                              <p><span className="text-slate-500">ERROR_MESSAGE:</span> {inflationRow?.errorMessage || "—"}</p>
+                              <p><span className="text-slate-500">AUX:</span> {formatAuxValue(inflationRow?.aux) || "—"}</p>
+                              <p><span className="text-slate-500">YoY:</span> {formatPercent(inflationRow?.yoy ?? null) || "—"}</p>
+                              <p><span className="text-slate-500">MoM:</span> {formatPercent(inflationRow?.mom ?? null) || "—"}</p>
+                              <p><span className="text-slate-500">REFRESHED_AT_UTC:</span> {inflationRow?.refreshedAtUtc || "—"}</p>
+                            </div>
+                          </div>
+                          {policyRow && (
+                            <div className="mt-3 border-t border-slate-200 pt-3">
+                              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Manual Override (Policy)</p>
+                              <div className="inline-flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="—"
+                                  className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none transition focus:border-blue-500"
+                                  value={hasManualOverride ? String(overrideValue) : ""}
+                                  onChange={(e) => updatePolicyOverride(card.currency, e.target.value)}
+                                />
+                                {hasManualOverride && (
+                                  <button
+                                    type="button"
+                                    className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-red-300 hover:text-red-700"
+                                    onClick={() => clearPolicyOverride(card.currency)}
+                                    aria-label={`Clear override for ${card.currency}`}
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                                {!hasManualOverride && (
+                                  <span className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500">Not set</span>
+                                )}
                               </div>
                             </div>
                           )}
-                          {!cardExpanded && (
-                            <p className="mt-2 text-[11px] text-zinc-500">Expand details to edit manual override.</p>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Inflation cards with computed YoY/MoM performance pills */}
-            <div className="rounded-xl border border-zinc-800 bg-[#0a0a0a] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-zinc-200">Inflation</h3>
-              {normalizedInflRows.length === 0 ? (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-4 text-sm text-zinc-400">
-                  No inflation snapshot rows.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {normalizedInflRows.map((row) => {
-                    const cardKey = `inflation-${row.currency}-${row.seriesId}`;
-                    const cardExpanded = Boolean(fredExpandedCards[cardKey]);
-                    const indexValue = Number(row.value);
-                    const gaugePct = toGaugePercent(indexValue, 80, 140);
-                    const gaugeArc = toGaugeArcDegrees(gaugePct);
-                    const gaugeStyle: CSSProperties = {
-                      background: `conic-gradient(#e30613 0deg ${gaugeArc}deg, rgba(255,255,255,0.18) ${gaugeArc}deg 360deg)`,
-                    };
-                    const sparklineValues = buildInflationSparkline(row.aux, indexValue);
-                    return (
-                      <article
-                        key={`${row.currency}-${row.seriesId}-${row.refreshedAtUtc}`}
-                        className="rounded-xl border border-zinc-800 bg-[#101010] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-lg">
-                              {currencyToEmoji[row.currency] ?? "🏳️"}
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-zinc-100">{row.currency || "N/A"}</p>
-                              <p className="font-mono text-[11px] text-zinc-500">{row.seriesId || ""}</p>
-                            </div>
-                          </div>
-                          <span className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${fredStatusBadgeClass(row.status)}`}>
-                            {row.status || "n/a"}
-                          </span>
-                        </div>
-                        <div className="mt-5 grid grid-cols-[120px_1fr] items-center gap-4">
-                          <div className="relative h-28 w-28 rounded-full p-[3px] [transform:rotate(-90deg)]" style={gaugeStyle}>
-                            <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#0f0f0f]">
-                              <span className="text-4xl font-semibold leading-none text-zinc-100 [transform:rotate(90deg)]">{toDisplayNumber(row.value, 2) || "—"}</span>
-                              <span className="mt-1 text-[10px] uppercase tracking-[0.12em] text-zinc-500 [transform:rotate(90deg)]">Index</span>
-                            </div>
-                          </div>
-                          <div className="min-w-0">
-                            <div className="mb-2 flex items-center justify-start">
-                              <svg viewBox="0 0 60 18" className="h-[18px] w-[60px]">
-                                <path d={sparklinePath(sparklineValues, 60, 18)} fill="none" stroke={sparklineStrokeByMomentum(row.yoy)} strokeWidth="1.5" strokeLinecap="round" />
-                              </svg>
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-xs">
-                              <span className={`rounded-md border px-2 py-1 font-bold ${fredDeltaPillClass(row.yoy)}`}>YoY {formatPercent(row.yoy) || "—"}</span>
-                              <span className={`rounded-md border px-2 py-1 font-bold ${fredDeltaPillClass(row.mom)}`}>MoM {formatPercent(row.mom) || "—"}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Expandable details block for full row metadata */}
-                        <div className="mt-3">
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-400 hover:text-zinc-100"
-                            onClick={() => toggleFredDetails(cardKey)}
-                          >
-                            <svg
-                              viewBox="0 0 20 20"
-                              className={`h-4 w-4 transition-transform ${cardExpanded ? "rotate-90" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                            >
-                              <path d="M7 5L13 10L7 15" />
-                            </svg>
-                            Details
-                          </button>
-                          {cardExpanded && (
-                            <div className="mt-2 grid gap-1 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-300">
-                              <p><span className="text-zinc-500">AS_OF_UTC:</span> {row.asOfUtc || "—"}</p>
-                              <p><span className="text-zinc-500">AUX:</span> {formatAuxValue(row.aux) || "—"}</p>
-                              <p><span className="text-zinc-500">ERROR_MESSAGE:</span> {row.errorMessage || "—"}</p>
-                              <p><span className="text-zinc-500">REFRESHED_AT_UTC:</span> {row.refreshedAtUtc || "—"}</p>
+                          {inflationRow && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <span className={`rounded-md border px-2 py-1 font-semibold ${fredDeltaPillClass(inflationRow.yoy)}`}>YoY {formatPercent(inflationRow.yoy) || "—"}</span>
+                              <span className={`rounded-md border px-2 py-1 font-semibold ${fredDeltaPillClass(inflationRow.mom)}`}>MoM {formatPercent(inflationRow.mom) || "—"}</span>
                             </div>
                           )}
                         </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </>
       )}
