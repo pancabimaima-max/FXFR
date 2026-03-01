@@ -17,6 +17,7 @@ from app.core.constants import (
     APP_NAME,
     APP_VERSION,
     AUTO_FETCH_GAP_WARN_COUNT,
+    CENTRAL_BANK_LABELS,
     DISPLAY_TZ_DEFAULT,
     SERVER_TZ_DEFAULT,
     STORAGE_TZ,
@@ -335,6 +336,22 @@ def _build_rate_metric(
             "last_refreshed_utc": str(last_refreshed_utc or ""),
         },
     }
+
+
+def _normalize_fred_snapshot_rows(rows: list[dict]) -> list[dict]:
+    normalized_rows: list[dict] = []
+    for row in rows:
+        item = dict(row or {})
+        currency = str(item.get("currency", "")).strip().upper()
+        aux_raw = item.get("aux", {})
+        aux = dict(aux_raw) if isinstance(aux_raw, dict) else {}
+        fallback_name = str(aux.get("central_bank", "")).strip()
+        bank_name = CENTRAL_BANK_LABELS.get(currency, fallback_name or currency or "Unknown")
+        aux["central_bank"] = bank_name
+        item["aux"] = aux
+        item["bank_name"] = bank_name
+        normalized_rows.append(item)
+    return normalized_rows
 
 
 def _to_rows(df: pd.DataFrame, limit: int = 50) -> list[dict]:
@@ -834,7 +851,7 @@ def get_fred_snapshot(request: Request, kind: str = Query(default="policy")):
     token = str(kind or "policy").strip().lower()
     if token not in {"policy", "inflation"}:
         raise HTTPException(status_code=400, detail="kind must be policy or inflation")
-    rows = services["db"].get_macro_snapshot(token)
+    rows = _normalize_fred_snapshot_rows(services["db"].get_macro_snapshot(token))
     data = {
         "kind": token,
         "rows": rows,

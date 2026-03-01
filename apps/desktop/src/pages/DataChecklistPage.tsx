@@ -194,6 +194,7 @@ function computeInflationDeltasFromObservations(observations: number[]): { yoy: 
 function normalizeFredRow(row: Record<string, unknown>) {
   return {
     currency: String(row.currency ?? "").trim().toUpperCase(),
+    bankName: String(row.bank_name ?? ""),
     seriesId: String(row.series_id ?? ""),
     value: row.value,
     aux: row.aux,
@@ -245,13 +246,15 @@ const currencyToCountryLabel: Record<string, string> = {
   USD: "United States",
 };
 
-const currencyToEmoji: Record<string, string> = {
-  AUD: "🇦🇺",
-  CAD: "🇨🇦",
-  EUR: "🇪🇺",
-  GBP: "🇬🇧",
-  JPY: "🇯🇵",
-  USD: "🇺🇸",
+const currencyToBankName: Record<string, string> = {
+  AUD: "Reserve Bank of Australia",
+  CAD: "Bank of Canada",
+  CHF: "Swiss National Bank",
+  CNY: "People's Bank of China",
+  EUR: "European Central Bank",
+  GBP: "Bank of England",
+  JPY: "Bank of Japan",
+  USD: "Federal Reserve",
 };
 
 function getRowValue(row: Record<string, unknown>, keys: string[]): unknown {
@@ -979,6 +982,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
       .sort((a, b) => a.localeCompare(b));
     return currencies.map((currency) => ({
       currency,
+      bankName: policyByCurrency.get(currency)?.bankName || inflationByCurrency.get(currency)?.bankName || currencyToBankName[currency] || currency,
       country: currencyToCountryLabel[currency] ?? currency,
       policy: policyByCurrency.get(currency) ?? null,
       inflation: inflationByCurrency.get(currency) ?? null,
@@ -1429,6 +1433,7 @@ export function DataChecklistPage({ sessionToken }: Props) {
                 {mergedFredCards.map((card) => {
                   const policyRow = card.policy;
                   const inflationRow = card.inflation;
+                  const flagCode = currencyToFlagCode[card.currency];
                   const cardKey = `fred-${card.currency}`;
                   const cardExpanded = Boolean(fredExpandedCards[cardKey]);
                   const overrideValue = policyManualOverrides[card.currency];
@@ -1462,9 +1467,13 @@ export function DataChecklistPage({ sessionToken }: Props) {
                       <div className="p-5">
                         <div className="mb-4 flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <span className="text-4xl">{currencyToEmoji[card.currency] ?? "🏳️"}</span>
+                            {flagCode ? (
+                              <span className={`fi fi-${flagCode} calendar-flag text-2xl`} title={card.country} aria-label={card.country} />
+                            ) : (
+                              <span className="calendar-flag-fallback">{card.currency || "N/A"}</span>
+                            )}
                             <div>
-                              <h3 className="font-semibold text-slate-900">{card.currency || "N/A"}</h3>
+                              <h3 className="font-semibold text-slate-900">{card.bankName}</h3>
                               <p className="text-sm text-slate-500">{card.country}</p>
                             </div>
                           </div>
