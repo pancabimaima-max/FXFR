@@ -1,0 +1,56 @@
+{
+  "runtime_and_tooling": {
+    "python": { "declared": "3.12.10", "resolved": "3.12.10", "sources": [".github/workflows/ci.yml","docs/MASTER_CONTROL.md"] },
+    "node": { "declared": "20.x", "resolved": "20", "sources": [".github/workflows/release-desktop.yml","docs/MASTER_CONTROL.md"] },
+    "pnpm": { "declared": "9.12.3", "resolved": "9.12.3", "sources": ["package.json",".github/workflows/release-desktop.yml"] }
+  },
+  "desktop_frontend_tauri": {
+    "tauri_framework": { "declared": "v2", "resolved": "v2", "sources": ["docs/MASTER_CONTROL.md"] },
+    "tauri_crates": {
+      "tauri": { "declared": null, "resolved": "2.0.2", "sources": ["apps/desktop/src-tauri/Cargo.toml"] },
+      "tauri-build": { "declared": null, "resolved": "2.0.1", "sources": ["apps/desktop/src-tauri/Cargo.toml"] }
+    },
+    "react": { "declared": "^18.3.1", "resolved": "18.3.1", "sources": ["apps/desktop/package.json","pnpm-lock.yaml"] },
+    "typescript": { "declared": "^5.6.3", "resolved": "5.9.3", "sources": ["apps/desktop/package.json","pnpm-lock.yaml"] },
+    "vite": { "declared": "^5.4.10", "resolved": "5.4.21", "sources": ["apps/desktop/package.json","pnpm-lock.yaml"] },
+    "eslint": { "declared": "^9.14.0", "resolved": "9.39.3", "sources": ["apps/desktop/package.json","pnpm-lock.yaml"] },
+    "@typescript-eslint/*": { "declared": null, "resolved": "8.56.1", "sources": ["pnpm-lock.yaml"] }
+  },
+  "engine_backend": {
+    "runtime": { "declared": "3.12.10", "resolved": "3.12.10", "sources": [".github/workflows/ci.yml"] },
+    "deps": { "declared": "pinned in requirements.txt and pyproject.toml", "resolved": "see services/engine/requirements.txt and services/engine/pyproject.toml", "sources": ["services/engine/requirements.txt","services/engine/pyproject.toml"] },
+    "contract_schema_version": { "declared": "1.0.0", "resolved": "1.0.0", "sources": ["packages/contracts/python/contracts/models.py"] }
+  },
+  "monorepo_package_manager": {
+    "packageManager_field": { "declared": "pnpm@9.12.3", "resolved": "pnpm@9.12.3", "sources": ["package.json"] },
+    "lockfile": { "file": "pnpm-lock.yaml", "note": "contains resolved exact versions" }
+  }
+}
+```{
+  "runtime_and_tooling": {
+    "python": { "declared": "3.12.10", "resolved": "3.12.10", "sources": [".github/workflows/ci.yml","docs/MASTER_CONTROL.md"] },
+    "node": { "declared": "20.x", "resolved": "20", "sources": [".github/workflows/release-desktop.yml","docs/MASTER_CONTROL.md"] },
+    "pnpm": { "declared": "9.12.3", "resolved": "9.12.3", "sources": ["package.json",".github/workflows/release-desktop.yml"] }
+  },
+  "desktop_frontend_tauri": {
+    "tauri_framework": { "declared": "v2", "resolved": "v2", "sources": ["docs/MASTER_CONTROL.md"] },
+    "tauri_crates": {
+      "tauri": { "declared": null, "resolved": "2.0.2", "sources": ["apps/desktop/src-tauri/Cargo.toml"] },
+      "tauri-build": { "declared": null, "resolved": "2.0.1", "sources": ["apps/desktop/src-tauri/Cargo.toml"] }
+    },
+    "react": { "declared": "^18.3.1", "resolved": "18.3.1", "sources": ["apps/desktop/package.json","pnpm-lock.yaml"] },
+    "typescript": { "declared": "^5.6.3", "resolved": "5.9.3", "sources": ["apps/desktop/package.json","pnpm-lock.yaml"] },
+    "vite": { "declared": "^5.4.10", "resolved": "5.4.21", "sources": ["apps/desktop/package.json","pnpm-lock.yaml"] },
+    "eslint": { "declared": "^9.14.0", "resolved": "9.39.3", "sources": ["apps/desktop/package.json","pnpm-lock.yaml"] },
+    "@typescript-eslint/*": { "declared": null, "resolved": "8.56.1", "sources": ["pnpm-lock.yaml"] }
+  },
+  "engine_backend": {
+    "runtime": { "declared": "3.12.10", "resolved": "3.12.10", "sources": [".github/workflows/ci.yml"] },
+    "deps": { "declared": "pinned in requirements.txt and pyproject.toml", "resolved": "see services/engine/requirements.txt and services/engine/pyproject.toml", "sources": ["services/engine/requirements.txt","services/engine/pyproject.toml"] },
+    "contract_schema_version": { "declared": "1.0.0", "resolved": "1.0.0", "sources": ["packages/contracts/python/contracts/models.py"] }
+  },
+  "monorepo_package_manager": {
+    "packageManager_field": { "declared": "pnpm@9.12.3", "resolved": "pnpm@9.12.3", "sources": ["package.json"] },
+    "lockfile": { "file": "pnpm-lock.yaml", "note": "contains resolved exact versions" }
+  }
+}
